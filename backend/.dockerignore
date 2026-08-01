@@ -1,0 +1,16 @@
+# Never bake local secrets or a Windows virtualenv into the image.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+*.log
+backups/

@@ -1,0 +1,63 @@
+# Redeploy Muney on the Pi whenever main moves.
+#
+# Dormant until the repo secrets below exist — without them the job is skipped,
+# so merging this file changes nothing on its own.
+#
+#   TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET  Tailscale OAuth client, scoped to a
+#                                         tag (e.g. tag:ci) that your ACLs let
+#                                         reach the Pi on port 22.
+#   PI_TAILSCALE_HOST                     MagicDNS name or 100.x.y.z address.
+#   PI_SSH_USER                           user to SSH as.
+#   PI_SSH_PRIVATE_KEY                    private half of a dedicated deploy key.
+#   PI_DEPLOY_SCRIPT_PATH                 e.g. /home/pi/Muney/deploy.sh
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pi
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that deploy secrets are configured
+        id: guard
+        env:
+          HOST: ${{ secrets.PI_TAILSCALE_HOST }}
+          TS_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$TS_ID" ]; then
+            echo "Deploy secrets not set — skipping."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Connect to tailnet
+        if: steps.guard.outputs.ready == 'true'
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Redeploy over SSH
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          KEY: ${{ secrets.PI_SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.PI_TAILSCALE_HOST }}
+          USER: ${{ secrets.PI_SSH_USER }}
+          SCRIPT: ${{ secrets.PI_DEPLOY_SCRIPT_PATH }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=30 \
+              "$USER@$HOST" "$SCRIPT"
