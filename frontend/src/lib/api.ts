@@ -62,10 +62,25 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 204) return undefined as T
 
   const text = await response.text()
-  const body: unknown = text ? JSON.parse(text) : null
+
+  // Not every response is JSON. An unhandled 500 comes back as the plain text
+  // "Internal Server Error", and parsing that blindly used to throw a
+  // SyntaxError that buried the actual failure.
+  let body: unknown = null
+  if (text) {
+    try {
+      body = JSON.parse(text)
+    } catch {
+      body = text
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(response.status, readDetail(body, `Request failed (${response.status})`))
+  }
+
+  if (typeof body === 'string') {
+    throw new ApiError(response.status, `Expected JSON from ${path} but got: ${body.slice(0, 120)}`)
   }
   return body as T
 }

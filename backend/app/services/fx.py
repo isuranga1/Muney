@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import NamedTuple
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import select
@@ -27,6 +29,29 @@ CENTS = Decimal("0.01")
 
 class FxError(RuntimeError):
     """Upstream rate provider was unreachable or returned something unusable."""
+
+
+class UpstreamRates(NamedTuple):
+    rates: dict[str, Decimal]
+    # When we pulled it, not when the provider published it — see the note in
+    # fetch_upstream_rates.
+    fetched_at: datetime
+    # Which URL actually answered — the fallback may have served this.
+    source_url: str
+
+
+def provider_label(url: str) -> str:
+    """Short name for a provider, for the `source` column and the UI.
+
+    Storing the raw URL there is wrong twice over: it overflows the column
+    (a CDN path runs to ~90 characters) and the host is the only part a reader
+    actually cares about.
+    """
+    try:
+        host = urlsplit(url).hostname
+    except ValueError:
+        host = None
+    return (host or url)[:60]
 
 
 def quantize_money(value: Decimal) -> Decimal:
@@ -102,35 +127,18 @@ def _extract_rate_table(payload: dict) -> dict | None:
     return nested[0] if len(nested) == 1 else None
 
 
-def _extract_timestamp(payload: dict) -> datetime:
-    """Provider's own 'as of' time, falling back to now."""
-    unix = payload.get("time_last_update_unix")
-    if isinstance(unix, (int, float)):
-        return datetime.fromtimestamp(int(unix), tz=timezone.utc)
-
-    # fawazahmed0 reports a plain YYYY-MM-DD.
-    day = payload.get("date")
-    if isinstance(day, str):
-        try:
-            return datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        except ValueError:
-            pass
-    return _now()
-
-
-def fetch_upstream_rates() -> tuple[dict[str, Decimal], datetime]:
+def fetch_upstream_rates() -> UpstreamRates:
     """Pull pivot-based rates from the configured provider.
 
     Tries the primary URL, then the fallback if one is configured — the default
     primary is a jsdelivr CDN path, which is fast but does occasionally 5xx.
-
-    Returns ({currency: units per 1 pivot}, provider timestamp).
     """
     urls = [settings.fx_api_url]
     if settings.fx_fallback_api_url and settings.fx_fallback_api_url not in urls:
         urls.append(settings.fx_fallback_api_url)
 
     payload: dict | None = None
+    used_url = urls[0]
     errors: list[str] = []
     for url in urls:
         try:
@@ -149,6 +157,7 @@ def fetch_upstream_rates() -> tuple[dict[str, Decimal], datetime]:
             continue
 
         payload = candidate
+        used_url = url
         break
 
     if payload is None:
@@ -169,12 +178,18 @@ def fetch_upstream_rates() -> tuple[dict[str, Decimal], datetime]:
         raise FxError("FX provider returned a rates table with no usable numbers")
 
     rates.setdefault(settings.fx_pivot_currency, Decimal("1"))
-    return rates, _extract_timestamp(payload)
+
+    # `fetched_at` is when *we* pulled the data, deliberately not the provider's
+    # own publication timestamp. This provider publishes once a day at 00:00 UTC;
+    # storing that would make rates read as "stale" for most of every day and
+    # trigger a pointless re-fetch on every startup, moments after succeeding.
+    return UpstreamRates(rates, _now(), used_url)
 
 
 def refresh_rates(db: Session) -> list[FxRate]:
     """Refresh every supported currency -> base pair. Manual rows are left alone."""
-    pivot_rates, fetched_at = fetch_upstream_rates()
+    pivot_rates, fetched_at, source_url = fetch_upstream_rates()
+    source = provider_label(source_url)
 
     target = settings.base_currency
     target_per_pivot = pivot_rates.get(target)
@@ -203,7 +218,7 @@ def refresh_rates(db: Session) -> list[FxRate]:
             row = FxRate(base_currency=code, quote_currency=target)
             db.add(row)
         row.rate = rate
-        row.source = settings.fx_api_url
+        row.source = source
         row.is_manual = False
         row.fetched_at = fetched_at
         updated.append(row)

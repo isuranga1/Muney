@@ -21,6 +21,8 @@ class FxRate(TimestampMixin, Base):
     base_currency: Mapped[str] = mapped_column(String(3), nullable=False, index=True)
     quote_currency: Mapped[str] = mapped_column(String(3), nullable=False, index=True)
     rate: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
-    source: Mapped[str] = mapped_column(String(60), default="api", nullable=False)
+    # Provider hostname, or "manual". Roomy on purpose: a previous 60-char
+    # limit silently made every refresh fail once a provider URL got longer.
+    source: Mapped[str] = mapped_column(String(255), default="api", nullable=False)
     is_manual: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
