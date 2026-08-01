@@ -47,7 +47,15 @@ class Settings(BaseSettings):
         "INR",
     ]
 
-    fx_api_url: str = "https://open.er-api.com/v6/latest/USD"
+    # fawazahmed0/currency-api: free, no key, no rate limit, quotes LKR.
+    # The pivot currency is part of the URL path, so if you change
+    # fx_pivot_currency you must change both URLs to match.
+    fx_api_url: str = (
+        "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest"
+        "/v1/currencies/usd.json"
+    )
+    # Same data, different host — used only if the primary fails.
+    fx_fallback_api_url: str = "https://latest.currency-api.pages.dev/v1/currencies/usd.json"
     fx_pivot_currency: str = "USD"
     fx_stale_after_hours: int = 12
 

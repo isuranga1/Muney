@@ -35,10 +35,11 @@ currency, a balance, and an account number. Accounts flagged as *liability* coun
 against net worth instead of toward it.
 
 **Automatic LKR conversion** — every account, expense and income shows its own
-currency *and* its LKR value. Rates come from a free public provider, are cached in
-Postgres, and refresh on demand or when they go stale. Any rate you set by hand wins
-and survives every refresh. If a currency has no rate, the app says so rather than
-quietly leaving it out of a total.
+currency *and* its LKR value. Rates come from a free public provider
+(fawazahmed0/currency-api — no key, no rate limit, ~340 currencies), are cached in
+Postgres, and refresh on demand or when they go stale. A second host is tried if the
+first is unreachable. Any rate you set by hand wins and survives every refresh. If a
+currency has no rate, the app says so rather than quietly leaving it out of a total.
 
 **Expenses** — create groups ("Monthly bills", "Trip to Japan"), add expenses under
 them, and click an expense to strike it out as paid. Each row carries an amount,
@@ -132,8 +133,9 @@ All backend settings live in `backend/.env`.
 | `ALLOW_BOOTSTRAP_REGISTRATION` | `true` | Only ever applies while zero users exist |
 | `BASE_CURRENCY` | `LKR` | Everything converts to this |
 | `SUPPORTED_CURRENCIES` | `LKR,USD,SGD,EUR,GBP,AUD,INR` | Comma-separated |
-| `FX_API_URL` | `https://open.er-api.com/v6/latest/USD` | Free, no API key |
-| `FX_PIVOT_CURRENCY` | `USD` | Cross rates are computed through this |
+| `FX_API_URL` | fawazahmed0/currency-api on jsDelivr | Free, no API key, no rate limit |
+| `FX_FALLBACK_API_URL` | `https://latest.currency-api.pages.dev/…` | Same data, used only if the primary fails |
+| `FX_PIVOT_CURRENCY` | `USD` | Cross rates are computed through this. The pivot is part of the URL path, so change both URLs to match |
 | `FX_STALE_AFTER_HOURS` | `12` | Older than this triggers a refresh at startup |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated |
 

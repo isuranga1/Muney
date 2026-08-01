@@ -44,7 +44,8 @@ services:
       ALLOW_BOOTSTRAP_REGISTRATION: ${ALLOW_BOOTSTRAP_REGISTRATION:-true}
       BASE_CURRENCY: ${BASE_CURRENCY:-LKR}
       SUPPORTED_CURRENCIES: ${SUPPORTED_CURRENCIES:-LKR,USD,SGD,EUR,GBP,AUD,INR}
-      FX_API_URL: ${FX_API_URL:-https://open.er-api.com/v6/latest/USD}
+      FX_API_URL: ${FX_API_URL:-https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json}
+      FX_FALLBACK_API_URL: ${FX_FALLBACK_API_URL:-https://latest.currency-api.pages.dev/v1/currencies/usd.json}
       FX_PIVOT_CURRENCY: ${FX_PIVOT_CURRENCY:-USD}
       FX_STALE_AFTER_HOURS: ${FX_STALE_AFTER_HOURS:-12}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}

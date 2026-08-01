@@ -75,41 +75,101 @@ def _oldest_api_fetch(db: Session) -> datetime | None:
     return oldest if oldest.tzinfo else oldest.replace(tzinfo=timezone.utc)
 
 
+def _extract_rate_table(payload: dict) -> dict | None:
+    """Find the currency table in a provider response.
+
+    Two shapes are supported, so the provider URL stays swappable:
+
+    fawazahmed0/currency-api (the default) nests the table under the lowercase
+    base code and has no wrapper key:
+        {"date": "2026-07-31", "usd": {"lkr": 335.81, "sgd": 1.28, ...}}
+
+    open.er-api.com / frankfurter-style put it under "rates":
+        {"rates": {"LKR": 335.81, ...}, "time_last_update_unix": 1753...}
+    """
+    for key in ("rates", "conversion_rates"):
+        table = payload.get(key)
+        if isinstance(table, dict):
+            return table
+
+    pivot_key = settings.fx_pivot_currency.lower()
+    table = payload.get(pivot_key)
+    if isinstance(table, dict):
+        return table
+
+    # Fall back to the only nested object, if the payload has exactly one.
+    nested = [value for value in payload.values() if isinstance(value, dict)]
+    return nested[0] if len(nested) == 1 else None
+
+
+def _extract_timestamp(payload: dict) -> datetime:
+    """Provider's own 'as of' time, falling back to now."""
+    unix = payload.get("time_last_update_unix")
+    if isinstance(unix, (int, float)):
+        return datetime.fromtimestamp(int(unix), tz=timezone.utc)
+
+    # fawazahmed0 reports a plain YYYY-MM-DD.
+    day = payload.get("date")
+    if isinstance(day, str):
+        try:
+            return datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return _now()
+
+
 def fetch_upstream_rates() -> tuple[dict[str, Decimal], datetime]:
     """Pull pivot-based rates from the configured provider.
 
+    Tries the primary URL, then the fallback if one is configured — the default
+    primary is a jsdelivr CDN path, which is fast but does occasionally 5xx.
+
     Returns ({currency: units per 1 pivot}, provider timestamp).
     """
-    try:
-        response = httpx.get(settings.fx_api_url, timeout=20.0)
-        response.raise_for_status()
-        payload = response.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        raise FxError(f"could not reach FX provider: {exc}") from exc
+    urls = [settings.fx_api_url]
+    if settings.fx_fallback_api_url and settings.fx_fallback_api_url not in urls:
+        urls.append(settings.fx_fallback_api_url)
 
-    if payload.get("result") == "error":
-        raise FxError(f"FX provider returned an error: {payload.get('error-type', 'unknown')}")
+    payload: dict | None = None
+    errors: list[str] = []
+    for url in urls:
+        try:
+            response = httpx.get(url, timeout=20.0, follow_redirects=True)
+            response.raise_for_status()
+            candidate = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            errors.append(f"{url}: {exc}")
+            continue
 
-    raw = payload.get("rates") or payload.get("conversion_rates")
-    if not isinstance(raw, dict):
-        raise FxError("FX provider response did not contain a 'rates' object")
+        if not isinstance(candidate, dict):
+            errors.append(f"{url}: response was not a JSON object")
+            continue
+        if candidate.get("result") == "error":
+            errors.append(f"{url}: {candidate.get('error-type', 'provider error')}")
+            continue
 
-    pivot = settings.fx_pivot_currency
+        payload = candidate
+        break
+
+    if payload is None:
+        raise FxError("could not reach any FX provider — " + "; ".join(errors))
+
+    raw = _extract_rate_table(payload)
+    if raw is None:
+        raise FxError("FX provider response did not contain a recognisable rates table")
+
     rates: dict[str, Decimal] = {}
     for code, value in raw.items():
         try:
             rates[str(code).upper()] = Decimal(str(value))
-        except (InvalidOperation, TypeError):
-            continue
-    rates.setdefault(pivot, Decimal("1"))
+        except (InvalidOperation, TypeError, ValueError):
+            continue  # crypto/metals entries can be null or non-numeric
 
-    timestamp = payload.get("time_last_update_unix")
-    fetched_at = (
-        datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
-        if isinstance(timestamp, (int, float))
-        else _now()
-    )
-    return rates, fetched_at
+    if not rates:
+        raise FxError("FX provider returned a rates table with no usable numbers")
+
+    rates.setdefault(settings.fx_pivot_currency, Decimal("1"))
+    return rates, _extract_timestamp(payload)
 
 
 def refresh_rates(db: Session) -> list[FxRate]:
