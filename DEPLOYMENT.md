@@ -256,6 +256,17 @@ docker compose up -d
   always a migration or DB failure: `docker compose logs backend`. nginx
   re-resolves the backend per request, so it recovers on its own once the
   backend is healthy — no nginx restart needed.
+- **`dependency failed to start: container muney-db-1 is unhealthy`** — read
+  `docker compose logs db`. If it mentions the data directory, PGDATA, or
+  initdb, the volume was created by an older version of this compose file that
+  didn't pin `PGDATA`. Because Postgres 18 relocated its default data directory
+  to `/var/lib/postgresql/18/docker`, the mount has to be pinned explicitly
+  (it is, now). Fix with `docker compose down -v` to drop the empty volume,
+  then `docker compose up -d --build`. **`-v` deletes the database** — only do
+  this before you have real data, or restore from a backup afterwards (§7.4).
+  If Postgres 18 misbehaves on your Pi for any other reason, setting
+  `POSTGRES_IMAGE=postgres:17-alpine` in `.env` is a safe fallback for a fresh
+  install.
 - **Backend restarting in a loop** — check `docker compose logs backend`. If
   it's `password authentication failed`, you changed `POSTGRES_PASSWORD` after
   the volume was created; the volume keeps the *original* password. Either

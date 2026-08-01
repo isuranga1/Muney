@@ -15,6 +15,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-muney}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-muney}
+      # Postgres 18 moved the image's default data directory to
+      # /var/lib/postgresql/18/docker and declares /var/lib/postgresql as its
+      # volume. Pinning PGDATA to a subdirectory of our own mount keeps the
+      # data inside db_data on every Postgres version, and stops initdb from
+      # fighting the image's own volume declaration.
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
