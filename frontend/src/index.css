@@ -1,92 +1,19 @@
+/**
+ * Entry stylesheet. Kept deliberately thin — three concerns, three files:
+ *
+ *   styles/tokens.css      colour + glass values      ← change colours here
+ *   styles/animations.css  keyframes + motion         ← change motion here
+ *   index.css (this file)  Tailwind wiring, base, reusable surface classes
+ */
 @import 'tailwindcss';
+@import './styles/tokens.css';
+@import './styles/animations.css';
 
-/* Class-based dark mode: <html class="dark"> */
+/* Class-based dark mode: <html class="dark">, stamped by the inline script in
+   index.html before first paint. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Palette roles. Both modes are *selected* — the dark column is the same hues
-   re-stepped for the dark surface, not an automatic inversion. Categorical
-   slots are in validated order; do not reorder or cycle them. */
-:root {
-  color-scheme: light;
-
-  --page: #eef0f4;
-  --surface: rgb(255 255 255 / 0.62);
-  --surface-solid: #fbfbfd;
-  --surface-2: rgb(255 255 255 / 0.45);
-  --ink: #0b0b0b;
-  --ink-2: #4b4b50;
-  --muted: #83838c;
-  --grid: rgb(11 11 11 / 0.09);
-  --line: rgb(11 11 11 / 0.16);
-  --hairline: rgb(11 11 11 / 0.08);
-
-  /* Glass construction: a translucent fill, a bright top edge that reads as a
-     bevel, and a soft drop shadow for the layer separation. */
-  --glass-blur: 28px;
-  --glass-saturate: 180%;
-  --glass-highlight: rgb(255 255 255 / 0.75);
-  --glass-shadow: 0 8px 32px rgb(11 11 11 / 0.09), 0 1px 2px rgb(11 11 11 / 0.05);
-  --glass-shadow-lg: 0 24px 64px rgb(11 11 11 / 0.16), 0 2px 8px rgb(11 11 11 / 0.06);
-
-  /* Ambient wash the glass has something to refract. */
-  --wash-1: rgb(42 120 214 / 0.3);
-  --wash-2: rgb(232 123 164 / 0.24);
-  --wash-3: rgb(27 175 122 / 0.2);
-
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --series-6: #008300;
-  --series-7: #4a3aa7;
-  --series-8: #e34948;
-
-  --good: #0ca30c;
-  --good-text: #006300;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #d03b3b;
-}
-
-.dark {
-  color-scheme: dark;
-
-  --page: #08080a;
-  --surface: rgb(42 42 48 / 0.55);
-  --surface-solid: #17171a;
-  --surface-2: rgb(255 255 255 / 0.06);
-  --ink: #ffffff;
-  --ink-2: #c8c8cf;
-  --muted: #8d8d96;
-  --grid: rgb(255 255 255 / 0.1);
-  --line: rgb(255 255 255 / 0.16);
-  --hairline: rgb(255 255 255 / 0.09);
-
-  --glass-highlight: rgb(255 255 255 / 0.14);
-  --glass-shadow: 0 8px 32px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
-  --glass-shadow-lg: 0 28px 72px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4);
-
-  --wash-1: rgb(57 135 229 / 0.45);
-  --wash-2: rgb(213 81 129 / 0.34);
-  --wash-3: rgb(25 158 112 / 0.3);
-
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
-  --series-6: #008300;
-  --series-7: #9085e9;
-  --series-8: #e66767;
-
-  --good: #0ca30c;
-  --good-text: #0ca30c;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #d03b3b;
-}
-
+/* Expose the tokens as Tailwind utilities: bg-surface, text-ink-2, border-hairline… */
 @theme inline {
   --color-page: var(--page);
   --color-surface: var(--surface);
@@ -119,6 +46,8 @@
   --radius-glass: 1.25rem;
 }
 
+/* ------------------------------------------------------------------ base */
+
 html,
 body,
 #root {
@@ -133,9 +62,9 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* The ambient field. Fixed, behind everything, never scrolls — the blur layers
-   above it sample this, which is what makes the glass read as glass rather
-   than as flat grey. */
+/* The ambient field: fixed, behind everything, never scrolls. The blur layers
+   above sample this — it is what makes the glass read as glass rather than as
+   flat grey. */
 body::before {
   content: '';
   position: fixed;
@@ -149,8 +78,24 @@ body::before {
   filter: blur(20px);
 }
 
+/* Columns of figures align; standalone hero numbers keep proportional figures. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--series-1) 30%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* ------------------------------------------------------------ components */
+
 @layer components {
-  /* Primary glass layer: panels, cards, sheets. */
+  /* Primary glass layer: cards, panels. */
   .glass {
     background-color: var(--surface);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -161,7 +106,7 @@ body::before {
       var(--glass-shadow);
   }
 
-  /* Chrome that sits above scrolling content: sidebar, sticky bars, modals. */
+  /* Chrome floating above scrolling content: sidebar, sticky bars. */
   .glass-chrome {
     background-color: var(--surface);
     backdrop-filter: blur(40px) saturate(200%);
@@ -169,6 +114,7 @@ body::before {
     border-color: var(--hairline);
   }
 
+  /* Sheets that sit above a scrim. */
   .glass-raised {
     background-color: var(--surface);
     backdrop-filter: blur(44px) saturate(200%);
@@ -179,7 +125,7 @@ body::before {
       var(--glass-shadow-lg);
   }
 
-  /* Inset controls — inputs and wells read as carved into the glass. */
+  /* Controls and wells: carved into the glass rather than sitting on it. */
   .glass-inset {
     background-color: var(--surface-2);
     border: 1px solid var(--line);
@@ -189,16 +135,15 @@ body::before {
     box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
   }
 
-  /* Dense data (tables) sits on a more opaque plate so small text stays crisp
-     over whatever the ambient wash is doing underneath. */
+  /* Dense data sits on a more opaque plate so small text stays crisp. */
   .plate {
     background-color: var(--surface-solid);
   }
 
   /* Native <select>. Two things the browser will not do for us:
-     1. the dropdown list is drawn by the OS, and a translucent background-color
-        makes Chrome fall back to a white popup — so options get an explicit
-        opaque colour pair;
+     1. the dropdown list is drawn by the OS, and a translucent
+        background-color makes Chrome fall back to a white popup — so options
+        get an explicit opaque colour pair;
      2. appearance:none removes the chevron, so we draw one. */
   .select {
     appearance: none;
@@ -211,7 +156,6 @@ body::before {
     background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M1.5 1.75L6 6.25l4.5-4.5' stroke='%238d8d96' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
   }
 
-  /* Applies to every select, including the popup rendered outside the page. */
   select option,
   select optgroup {
     background-color: var(--surface-solid);
@@ -230,11 +174,15 @@ body::before {
     background-color: rgb(11 11 11 / 0.04);
     cursor: pointer;
     transition:
-      background-color 0.18s ease,
-      border-color 0.18s ease;
+      background-color var(--dur-fast) ease,
+      border-color var(--dur-fast) ease,
+      transform var(--dur-fast) var(--ease);
   }
   .dark .checkbox {
     background-color: rgb(255 255 255 / 0.06);
+  }
+  .checkbox:active {
+    transform: scale(0.9);
   }
   .checkbox:checked {
     background-color: var(--series-1);
@@ -248,42 +196,12 @@ body::before {
     outline: 2px solid var(--series-1);
     outline-offset: 2px;
   }
-}
 
-/* Columns of figures line up; standalone hero numbers keep proportional figures. */
-.tabular {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Apple-ish easing: quick out, gentle settle. */
-.spring {
-  transition:
-    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.2s ease,
-    opacity 0.2s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .spring {
-    transition: none;
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(var(--date-icon-invert, 0));
+    cursor: pointer;
   }
-}
-
-input[type='date']::-webkit-calendar-picker-indicator {
-  filter: invert(var(--date-icon-invert, 0));
-  cursor: pointer;
-}
-.dark input[type='date']::-webkit-calendar-picker-indicator {
-  --date-icon-invert: 1;
-}
-
-::selection {
-  background-color: color-mix(in oklab, var(--series-1) 30%, transparent);
-}
-
-/* Scrollbars that match the glass rather than fighting it. */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
+  .dark input[type='date']::-webkit-calendar-picker-indicator {
+    --date-icon-invert: 1;
+  }
 }

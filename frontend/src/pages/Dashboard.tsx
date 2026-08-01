@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 
 import { BarList, Panel, StatTile } from '@/components/charts'
+import { NoRateBadge, StaleRatesBadge } from '@/components/badges'
+import { AlertCircleIcon, AlertTriangleIcon } from '@/components/icons'
 import { Badge, Card, ErrorNote, Spinner } from '@/components/ui'
 import { money, seriesColor, shortDate } from '@/lib/format'
 import { useDashboard } from '@/lib/queries'
@@ -42,7 +44,7 @@ export default function Dashboard() {
   }))
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="animate-rise flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
@@ -52,13 +54,9 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {data.fx_is_stale && (
-            <Badge tone="warning" icon="⚠">
-              FX rates are stale
-            </Badge>
-          )}
+          {data.fx_is_stale && <StaleRatesBadge />}
           {data.overdue_count > 0 && (
-            <Badge tone="critical" icon="●">
+            <Badge tone="critical" icon={<AlertCircleIcon size={12} strokeWidth={2.5} />}>
               {data.overdue_count} overdue · {money(data.overdue_total, base)}
             </Badge>
           )}
@@ -66,19 +64,23 @@ export default function Dashboard() {
       </div>
 
       {data.unconvertible_currencies.length > 0 && (
-        <Card className="border-warning/45 bg-warning/10 px-4 py-3 text-sm">
-          <span aria-hidden="true">⚠ </span>
-          No {base} rate for {data.unconvertible_currencies.join(', ')} — amounts in{' '}
-          {data.unconvertible_currencies.length === 1 ? 'that currency are' : 'those currencies are'}{' '}
-          left out of the totals below.{' '}
-          <Link to="/settings" className="underline underline-offset-2">
-            Set a rate
-          </Link>
-          .
+        <Card className="animate-fade flex items-start gap-2.5 border-warning/45 bg-warning/10 px-4 py-3 text-sm">
+          <AlertTriangleIcon size={16} className="mt-px shrink-0 text-warning" />
+          <span>
+            No {base} rate for {data.unconvertible_currencies.join(', ')} — amounts in{' '}
+            {data.unconvertible_currencies.length === 1
+              ? 'that currency are'
+              : 'those currencies are'}{' '}
+            left out of the totals below.{' '}
+            <Link to="/settings" className="underline underline-offset-2">
+              Set a rate
+            </Link>
+            .
+          </span>
         </Card>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Net worth"
           value={data.net_worth}
@@ -174,9 +176,7 @@ export default function Dashboard() {
                       {row.currency}
                       {!row.rate_available && (
                         <span className="ml-2">
-                          <Badge tone="warning" icon="⚠">
-                            no rate
-                          </Badge>
+                          <NoRateBadge />
                         </span>
                       )}
                       <span className="ml-2 text-xs text-muted">

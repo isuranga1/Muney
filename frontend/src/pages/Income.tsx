@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 
+import { IncomeStatusBadge, NoRateBadge } from '@/components/badges'
+import { CheckIcon, PlusIcon } from '@/components/icons'
 import {
-  Badge,
   Button,
   Card,
   Checkbox,
@@ -199,10 +200,12 @@ export default function IncomePage() {
         actions={
           <>
             <Button onClick={() => setSourceDraft({ name: '', description: '' })}>
-              + New source
+              <PlusIcon size={15} />
+              New source
             </Button>
             <Button variant="primary" onClick={() => setIncomeDraft(newIncome(null))}>
-              + Add income
+              <PlusIcon size={15} />
+              Add income
             </Button>
           </>
         }
@@ -230,12 +233,13 @@ export default function IncomePage() {
           hint="Add a source such as “Salary” or a freelance client, then record what you expect and what has landed."
           action={
             <Button variant="primary" onClick={() => setSourceDraft({ name: '', description: '' })}>
-              + Create your first source
+              <PlusIcon size={15} />
+              Create your first source
             </Button>
           }
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="stagger flex flex-col gap-4">
           {allSources.map((source, index) => (
             <SourceCard
               key={source.id}
@@ -587,18 +591,18 @@ function SourceCard({
                         type="button"
                         onClick={() => onToggleReceived(income)}
                         title={received ? 'Mark as not yet received' : 'Mark as received'}
-                        className="flex items-center gap-2 text-left"
+                        className="group/row flex items-center gap-2.5 text-left"
                       >
                         <span
                           aria-hidden="true"
                           className={cx(
-                            'grid size-4 shrink-0 place-items-center rounded border text-[10px]',
+                            'spring grid size-[18px] shrink-0 place-items-center rounded-md border',
                             received
                               ? 'border-good bg-good/15 text-good-text'
-                              : 'border-line text-transparent',
+                              : 'border-line text-transparent group-hover/row:text-muted',
                           )}
                         >
-                          ✓
+                          <CheckIcon size={12} strokeWidth={2.75} />
                         </span>
                         <span className={cx('font-medium', received && 'text-muted line-through')}>
                           {income.name}
@@ -612,13 +616,7 @@ function SourceCard({
                       {money(income.amount, income.currency)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-right text-ink-2">
-                      {income.rate_available ? (
-                        money(income.converted_amount, base)
-                      ) : (
-                        <Badge tone="warning" icon="⚠">
-                          no rate
-                        </Badge>
-                      )}
+                      {income.rate_available ? money(income.converted_amount, base) : <NoRateBadge />}
                     </td>
                     <td className="px-3 py-2.5 text-ink-2">
                       {shortDate(income.expected_date)}
@@ -629,21 +627,11 @@ function SourceCard({
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      {received ? (
-                        <Badge tone="good" icon="✓">
-                          Received {income.received_date ? shortDate(income.received_date) : ''}
-                        </Badge>
-                      ) : cancelled ? (
-                        <Badge icon="◌">Cancelled</Badge>
-                      ) : income.is_late ? (
-                        <Badge tone="warning" icon="⚠">
-                          Late
-                        </Badge>
-                      ) : (
-                        <Badge tone="info" icon="○">
-                          Expected
-                        </Badge>
-                      )}
+                      <IncomeStatusBadge
+                        status={income.status}
+                        receivedDate={income.received_date}
+                        isLate={income.is_late}
+                      />
                     </td>
                     <td className="px-5 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
@@ -666,7 +654,8 @@ function SourceCard({
 
       <div className="border-t border-hairline px-5 py-3">
         <Button size="sm" onClick={onAddIncome}>
-          + Add income
+          <PlusIcon size={14} />
+          Add income
         </Button>
       </div>
     </Card>

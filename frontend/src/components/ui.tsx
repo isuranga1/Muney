@@ -8,6 +8,8 @@ import type {
 } from 'react'
 import { useEffect } from 'react'
 
+import { AlertTriangleIcon, CloseIcon } from '@/components/icons'
+
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
@@ -151,25 +153,30 @@ const BADGE_TONES = {
   info: 'bg-series-1/12 text-series-1 border-series-1/30',
 } as const
 
+/**
+ * Status pill. `icon` is a node so it can be any icon from components/icons —
+ * the pairing matters: a status must never be carried by colour alone, since
+ * several of these tones are indistinguishable to a colourblind reader.
+ */
 export function Badge({
   tone = 'neutral',
   icon,
   children,
 }: {
   tone?: keyof typeof BADGE_TONES
-  icon?: string
+  icon?: ReactNode
   children: ReactNode
 }) {
   return (
     <span
       className={cx(
-        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1.5 rounded-full border py-0.5 text-xs font-medium',
         'backdrop-blur-sm',
+        icon ? 'pr-2.5 pl-2' : 'px-2.5',
         BADGE_TONES[tone],
       )}
     >
-      {/* Icon + label, never colour alone. */}
-      {icon && <span aria-hidden="true">{icon}</span>}
+      {icon}
       {children}
     </span>
   )
@@ -179,17 +186,17 @@ export function ErrorNote({ error }: { error: unknown }) {
   if (!error) return null
   const message = error instanceof Error ? error.message : String(error)
   return (
-    <div className="mb-4 rounded-xl border border-critical/35 bg-critical/10 px-4 py-3 text-sm text-critical backdrop-blur-sm">
-      <span aria-hidden="true">⚠ </span>
-      {message}
+    <div className="animate-fade mb-4 flex items-start gap-2 rounded-xl border border-critical/35 bg-critical/10 px-4 py-3 text-sm text-critical backdrop-blur-sm">
+      <AlertTriangleIcon size={16} className="mt-px shrink-0" />
+      <span>{message}</span>
     </div>
   )
 }
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2.5 py-10 text-sm text-muted">
-      <span className="size-3.5 animate-spin rounded-full border-2 border-line border-t-series-1" />
+    <div className="animate-fade flex items-center gap-2.5 py-10 text-sm text-muted">
+      <span className="animate-spin-slow size-3.5 rounded-full border-2 border-line border-t-series-1" />
       {label}
     </div>
   )
@@ -228,7 +235,7 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
       {/* Scrim doubles as the dismiss target; blurring it pushes the page back. */}
       <div
-        className="fixed inset-0 bg-black/25 backdrop-blur-md dark:bg-black/50"
+        className="animate-fade fixed inset-0 bg-black/25 backdrop-blur-md dark:bg-black/50"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -236,7 +243,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="glass-raised relative z-10 my-auto w-full max-w-lg rounded-[1.5rem]"
+        className="glass-raised animate-pop relative z-10 my-auto w-full max-w-lg rounded-[1.5rem]"
       >
         <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
           <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">{title}</h2>
@@ -244,9 +251,9 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="spring grid size-7 place-items-center rounded-full bg-black/[0.06] text-sm leading-none text-ink-2 hover:bg-black/10 hover:text-ink dark:bg-white/10 dark:hover:bg-white/[0.16]"
+            className="spring grid size-7 place-items-center rounded-full bg-black/[0.06] text-ink-2 hover:bg-black/10 hover:text-ink dark:bg-white/10 dark:hover:bg-white/[0.16]"
           >
-            ✕
+            <CloseIcon size={15} />
           </button>
         </div>
         <div className="px-6 py-5">{children}</div>

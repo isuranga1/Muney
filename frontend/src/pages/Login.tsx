@@ -5,6 +5,7 @@ import { http } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import type { AuthStatus } from '@/types'
+import { MoonIcon, SunIcon, WalletIcon } from '@/components/icons'
 import { Button, Card, ErrorNote, Field, Input } from '@/components/ui'
 
 export default function Login() {
@@ -44,17 +45,15 @@ export default function Login() {
     <div className="relative flex min-h-full items-center justify-center px-4 py-12">
       <div className="absolute top-4 right-4">
         <Button size="sm" variant="ghost" onClick={toggle}>
-          {dark ? '☀ Light' : '☾ Dark'}
+          {dark ? <SunIcon size={14} /> : <MoonIcon size={14} />}
+          {dark ? 'Light' : 'Dark'}
         </Button>
       </div>
 
       <div className="w-full max-w-sm">
         <div className="mb-7 text-center">
-          <div
-            aria-hidden="true"
-            className="glass mx-auto mb-5 grid size-14 place-items-center rounded-2xl text-2xl font-semibold text-series-1"
-          >
-            ₨
+          <div className="glass animate-pop mx-auto mb-5 grid size-14 place-items-center rounded-2xl text-series-1">
+            <WalletIcon size={26} />
           </div>
           <h1 className="text-[2rem] font-semibold tracking-[-0.03em]">Muney</h1>
           <p className="mt-1.5 text-sm text-ink-2">

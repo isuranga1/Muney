@@ -1,0 +1,102 @@
+/**
+ * Colour and glass tokens — the only file that defines raw colour values.
+ *
+ * Change a colour here and it propagates everywhere: `index.css` maps these
+ * onto Tailwind utilities (`bg-surface`, `text-ink-2`, …) and components only
+ * ever reference those.
+ *
+ * Both modes are *selected*, not computed. The dark column is the same eight
+ * hues re-stepped for a dark surface, and each set was validated for
+ * colourblind separation and contrast against its own surface — so if you
+ * change a --series-* value, change its partner and re-check the pair.
+ * Series slots are used in fixed order and never cycled.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --page: #eef0f4;
+  --surface: rgb(255 255 255 / 0.62);
+  --surface-solid: #fbfbfd;
+  --surface-2: rgb(255 255 255 / 0.45);
+
+  /* ink */
+  --ink: #0b0b0b;
+  --ink-2: #4b4b50;
+  --muted: #83838c;
+
+  /* lines */
+  --grid: rgb(11 11 11 / 0.09);
+  --line: rgb(11 11 11 / 0.16);
+  --hairline: rgb(11 11 11 / 0.08);
+
+  /* glass construction: translucent fill + bright top bevel + soft depth */
+  --glass-blur: 28px;
+  --glass-saturate: 180%;
+  --glass-highlight: rgb(255 255 255 / 0.75);
+  --glass-shadow: 0 8px 32px rgb(11 11 11 / 0.09), 0 1px 2px rgb(11 11 11 / 0.05);
+  --glass-shadow-lg: 0 24px 64px rgb(11 11 11 / 0.16), 0 2px 8px rgb(11 11 11 / 0.06);
+
+  /* ambient wash the glass refracts (see index.css → body::before) */
+  --wash-1: rgb(42 120 214 / 0.3);
+  --wash-2: rgb(232 123 164 / 0.24);
+  --wash-3: rgb(27 175 122 / 0.2);
+
+  /* categorical series — fixed order, never cycled */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+
+  /* status — reserved, never reused as a series colour */
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --page: #08080a;
+  --surface: rgb(42 42 48 / 0.55);
+  --surface-solid: #17171a;
+  --surface-2: rgb(255 255 255 / 0.06);
+
+  --ink: #ffffff;
+  --ink-2: #c8c8cf;
+  --muted: #8d8d96;
+
+  --grid: rgb(255 255 255 / 0.1);
+  --line: rgb(255 255 255 / 0.16);
+  --hairline: rgb(255 255 255 / 0.09);
+
+  --glass-highlight: rgb(255 255 255 / 0.14);
+  --glass-shadow: 0 8px 32px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
+  --glass-shadow-lg: 0 28px 72px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4);
+
+  --wash-1: rgb(57 135 229 / 0.45);
+  --wash-2: rgb(213 81 129 / 0.34);
+  --wash-3: rgb(25 158 112 / 0.3);
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+
+  --good: #0ca30c;
+  --good-text: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+}

@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 
+import { ExpenseStatusBadge, NoRateBadge } from '@/components/badges'
+import { CheckIcon, PlusIcon } from '@/components/icons'
 import {
-  Badge,
   Button,
   Card,
   Checkbox,
@@ -201,9 +202,13 @@ export default function Expenses() {
         subtitle={`Group them, tick off what's paid. Totals are shown in ${base}.`}
         actions={
           <>
-            <Button onClick={() => setGroupDraft({ name: '', description: '' })}>+ New group</Button>
+            <Button onClick={() => setGroupDraft({ name: '', description: '' })}>
+              <PlusIcon size={15} />
+              New group
+            </Button>
             <Button variant="primary" onClick={() => setExpenseDraft(newExpense(null))}>
-              + Add expense
+              <PlusIcon size={15} />
+              Add expense
             </Button>
           </>
         }
@@ -231,12 +236,13 @@ export default function Expenses() {
           hint="Create a group like “Monthly bills” or “Trip to Japan”, then add the expenses that belong to it."
           action={
             <Button variant="primary" onClick={() => setGroupDraft({ name: '', description: '' })}>
-              + Create your first group
+              <PlusIcon size={15} />
+              Create your first group
             </Button>
           }
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="stagger flex flex-col gap-4">
           {allGroups.map((group, index) => (
             <GroupCard
               key={group.id}
@@ -592,18 +598,18 @@ function GroupCard({
                         type="button"
                         onClick={() => onTogglePaid(expense)}
                         title={paid ? 'Mark as unpaid' : 'Mark as paid'}
-                        className="flex items-center gap-2 text-left"
+                        className="group/row flex items-center gap-2.5 text-left"
                       >
                         <span
                           aria-hidden="true"
                           className={cx(
-                            'grid size-4 shrink-0 place-items-center rounded border text-[10px]',
+                            'spring grid size-[18px] shrink-0 place-items-center rounded-md border',
                             paid
                               ? 'border-good bg-good/15 text-good-text'
-                              : 'border-line text-transparent',
+                              : 'border-line text-transparent group-hover/row:text-muted',
                           )}
                         >
-                          ✓
+                          <CheckIcon size={12} strokeWidth={2.75} />
                         </span>
                         <span className={cx('font-medium', paid && 'text-muted line-through')}>
                           {expense.name}
@@ -617,13 +623,7 @@ function GroupCard({
                       {money(expense.amount, expense.currency)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-right text-ink-2">
-                      {expense.rate_available ? (
-                        money(expense.converted_amount, base)
-                      ) : (
-                        <Badge tone="warning" icon="⚠">
-                          no rate
-                        </Badge>
-                      )}
+                      {expense.rate_available ? money(expense.converted_amount, base) : <NoRateBadge />}
                     </td>
                     <td className="px-3 py-2.5 text-ink-2">
                       {shortDate(expense.due_date)}
@@ -634,21 +634,11 @@ function GroupCard({
                       )}
                     </td>
                     <td className="px-3 py-2.5">
-                      {paid ? (
-                        <Badge tone="good" icon="✓">
-                          Paid {expense.paid_date ? shortDate(expense.paid_date) : ''}
-                        </Badge>
-                      ) : cancelled ? (
-                        <Badge icon="◌">Cancelled</Badge>
-                      ) : expense.is_overdue ? (
-                        <Badge tone="critical" icon="●">
-                          Overdue
-                        </Badge>
-                      ) : (
-                        <Badge tone="info" icon="○">
-                          Pending
-                        </Badge>
-                      )}
+                      <ExpenseStatusBadge
+                        status={expense.status}
+                        paidDate={expense.paid_date}
+                        isOverdue={expense.is_overdue}
+                      />
                     </td>
                     <td className="px-5 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
@@ -671,7 +661,8 @@ function GroupCard({
 
       <div className="border-t border-hairline px-5 py-3">
         <Button size="sm" onClick={onAddExpense}>
-          + Add expense
+          <PlusIcon size={14} />
+          Add expense
         </Button>
       </div>
     </Card>

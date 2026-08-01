@@ -1,15 +1,9 @@
 import { useState } from 'react'
 
 import { Panel } from '@/components/charts'
-import {
-  Badge,
-  Button,
-  Card,
-  ErrorNote,
-  Input,
-  SectionHeader,
-  Spinner,
-} from '@/components/ui'
+import { ManualRateBadge, NoRateBadge, StaleRatesBadge } from '@/components/badges'
+import { RefreshIcon } from '@/components/icons'
+import { Button, Card, ErrorNote, Input, SectionHeader, Spinner } from '@/components/ui'
 import { money, rate as formatRate, relativeTime } from '@/lib/format'
 import {
   useClearManualRate,
@@ -51,7 +45,7 @@ export default function Settings() {
   if (fx.isLoading) return <Spinner />
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="animate-rise flex flex-col gap-6">
       <SectionHeader
         title="Rates & settings"
         subtitle={`Every amount in Muney is converted to ${base}.`}
@@ -61,7 +55,8 @@ export default function Settings() {
             onClick={() => refresh.mutate(undefined)}
             disabled={refresh.isPending}
           >
-            {refresh.isPending ? 'Fetching…' : '↻ Refresh rates'}
+            <RefreshIcon size={15} className={refresh.isPending ? 'animate-spin-slow' : undefined} />
+            {refresh.isPending ? 'Fetching…' : 'Refresh rates'}
           </Button>
         }
       />
@@ -73,9 +68,7 @@ export default function Settings() {
         subtitle="Fetched from the configured provider. A manual rate you set here always wins and survives every refresh."
         action={
           fx.data?.is_stale ? (
-            <Badge tone="warning" icon="⚠">
-              stale
-            </Badge>
+            <StaleRatesBadge />
           ) : (
             <span className="text-xs text-muted">
               updated {relativeTime(fx.data?.last_updated)}
@@ -124,9 +117,7 @@ export default function Settings() {
                   </td>
                   <td className="py-2.5">
                     {row.is_manual ? (
-                      <Badge tone="info" icon="✎">
-                        manual
-                      </Badge>
+                      <ManualRateBadge />
                     ) : (
                       <span className="text-xs text-muted">
                         live · {relativeTime(row.fetched_at)}
@@ -189,9 +180,7 @@ export default function Settings() {
                         />
                       </div>
                     ) : (
-                      <Badge tone="warning" icon="⚠">
-                        no rate
-                      </Badge>
+                      <NoRateBadge />
                     )}
                   </td>
                   <td className="py-2.5 text-xs text-muted">not quoted by the provider</td>

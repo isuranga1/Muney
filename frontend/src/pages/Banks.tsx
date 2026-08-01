@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 
+import { InactiveBadge, LiabilityBadge, NoRateBadge } from '@/components/badges'
+import { PlusIcon } from '@/components/icons'
 import {
-  Badge,
   Button,
   Card,
   Checkbox,
@@ -143,7 +144,8 @@ export default function Banks() {
         subtitle={`Balances are converted to ${base} using the current rates.`}
         actions={
           <Button variant="primary" onClick={() => setBankDraft({ ...EMPTY_BANK })}>
-            + Add bank
+            <PlusIcon size={15} />
+            Add bank
           </Button>
         }
       />
@@ -156,12 +158,13 @@ export default function Banks() {
           hint="Add a bank, then add the accounts you hold there. Each account has its own currency and is converted for you."
           action={
             <Button variant="primary" onClick={() => setBankDraft({ ...EMPTY_BANK })}>
-              + Add your first bank
+              <PlusIcon size={15} />
+              Add your first bank
             </Button>
           }
         />
       ) : (
-        <div className="mt-4 flex flex-col gap-4">
+        <div className="stagger mt-4 flex flex-col gap-4">
           {banks.data?.map((bank, index) => (
             <BankCard
               key={bank.id}
@@ -416,7 +419,8 @@ function BankCard({
         <div className="px-5 py-6 text-center">
           <p className="text-sm text-muted">No accounts in this bank yet.</p>
           <Button size="sm" className="mt-3" onClick={onAddAccount}>
-            + Add account
+            <PlusIcon size={14} />
+            Add account
           </Button>
         </div>
       ) : (
@@ -438,12 +442,8 @@ function BankCard({
                     <td className="px-5 py-2.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{account.name}</span>
-                        {account.is_liability && (
-                          <Badge tone="critical" icon="▾">
-                            liability
-                          </Badge>
-                        )}
-                        {!account.is_active && <Badge icon="◌">inactive</Badge>}
+                        {account.is_liability && <LiabilityBadge />}
+                        {!account.is_active && <InactiveBadge />}
                       </div>
                       {account.account_number && (
                         <span className="text-xs text-muted">{account.account_number}</span>
@@ -454,13 +454,7 @@ function BankCard({
                       {money(account.balance, account.currency)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-right text-ink-2">
-                      {account.rate_available ? (
-                        money(account.converted_balance, base)
-                      ) : (
-                        <Badge tone="warning" icon="⚠">
-                          no rate
-                        </Badge>
-                      )}
+                      {account.rate_available ? money(account.converted_balance, base) : <NoRateBadge />}
                     </td>
                     <td className="px-5 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
@@ -480,7 +474,8 @@ function BankCard({
           </div>
           <div className="border-t border-hairline px-5 py-3">
             <Button size="sm" onClick={onAddAccount}>
-              + Add account
+              <PlusIcon size={14} />
+              Add account
             </Button>
           </div>
         </>

@@ -1,0 +1,134 @@
+/**
+ * Motion — the only file that defines animation.
+ *
+ * Deliberately restrained: entrances only, nothing that loops in the
+ * background, nothing that moves while you are reading a number. To dial the
+ * whole app up or down, change --ease and --dur-* below.
+ *
+ * Everything here is disabled under `prefers-reduced-motion` at the bottom of
+ * the file, so individual rules never need to worry about it.
+ */
+
+:root {
+  /* Quick out, gentle settle. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 0.18s;
+  --dur-base: 0.32s;
+  --dur-slow: 0.45s;
+}
+
+@keyframes muney-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes muney-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes muney-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes muney-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------------------- classes */
+
+.animate-rise {
+  animation: muney-rise var(--dur-slow) var(--ease) both;
+}
+
+.animate-fade {
+  animation: muney-fade var(--dur-base) ease both;
+}
+
+.animate-pop {
+  animation: muney-pop var(--dur-base) var(--ease) both;
+}
+
+.animate-spin-slow {
+  animation: muney-spin 0.9s linear infinite;
+}
+
+/**
+ * Stagger direct children so a grid of cards assembles instead of snapping in.
+ * Capped at 8 steps — beyond that everything shares the last delay, so a long
+ * list never leaves you waiting on the tail.
+ */
+.stagger > * {
+  animation: muney-rise var(--dur-slow) var(--ease) both;
+}
+.stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 180ms;
+}
+.stagger > *:nth-child(6) {
+  animation-delay: 225ms;
+}
+.stagger > *:nth-child(n + 7) {
+  animation-delay: 260ms;
+}
+
+/* Transition helper for hover/press states (not an entrance animation). */
+.spring {
+  transition:
+    transform var(--dur-base) var(--ease),
+    box-shadow var(--dur-base) var(--ease),
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    opacity var(--dur-fast) ease;
+}
+
+/* ------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-fade,
+  .animate-pop,
+  .stagger > * {
+    animation: none !important;
+  }
+  .spring {
+    transition: none !important;
+  }
+  .animate-spin-slow {
+    /* Keep the spinner turning — it signals "still working" — but slow it. */
+    animation-duration: 2s;
+  }
+}
