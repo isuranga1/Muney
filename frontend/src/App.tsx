@@ -7,6 +7,7 @@ import Dashboard from '@/pages/Dashboard'
 import Expenses from '@/pages/Expenses'
 import IncomePage from '@/pages/Income'
 import Login from '@/pages/Login'
+import News from '@/pages/News'
 import Settings from '@/pages/Settings'
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/banks" element={<Banks />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/income" element={<IncomePage />} />
+        <Route path="/news" element={<News />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

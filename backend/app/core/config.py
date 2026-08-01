@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     fx_pivot_currency: str = "USD"
     fx_stale_after_hours: int = 12
 
+    # How often feeds refresh themselves in the background. 0 disables the
+    # loop entirely and leaves refreshing to the button (or cron).
+    news_refresh_minutes: int = 30
+    # Unsaved articles older than this are pruned so the Pi's disk stays small.
+    news_retention_days: int = 60
+
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

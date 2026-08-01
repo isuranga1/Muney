@@ -17,6 +17,8 @@ class AppConfig(BaseModel):
     expense_statuses: list[str]
     income_statuses: list[str]
     recurrences: list[str]
+    # 0 means the background loop is off and refreshing is manual.
+    news_refresh_minutes: int
 
 
 class Health(BaseModel):
@@ -35,6 +37,7 @@ def app_config() -> AppConfig:
         expense_statuses=[s.value for s in ExpenseStatus],
         income_statuses=[s.value for s in IncomeStatus],
         recurrences=[r.value for r in Recurrence],
+        news_refresh_minutes=settings.news_refresh_minutes,
     )
 
 

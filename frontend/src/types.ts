@@ -6,6 +6,7 @@ export interface AppConfig {
   expense_statuses: string[]
   income_statuses: string[]
   recurrences: string[]
+  news_refresh_minutes: number
 }
 
 export interface User {
@@ -125,6 +126,78 @@ export interface IncomeSource {
   expected_converted: number
   income_count: number
   received_count: number
+}
+
+export interface Article {
+  id: number
+  feed_id: number
+  title: string
+  link: string
+  summary: string | null
+  author: string | null
+  published_at: string | null
+  fetched_at: string
+  is_read: boolean
+  is_saved: boolean
+  feed_name: string | null
+  group_name: string | null
+}
+
+export interface Feed {
+  id: number
+  group_id: number | null
+  name: string
+  url: string
+  site_url: string | null
+  notes: string | null
+  sort_order: number
+  is_enabled: boolean
+  last_fetched_at: string | null
+  last_status: string | null
+  last_error: string | null
+  article_count: number
+  unread_count: number
+}
+
+export interface FeedGroup {
+  id: number
+  name: string
+  description: string | null
+  color: string | null
+  sort_order: number
+  is_archived: boolean
+  feeds: Feed[]
+  article_count: number
+  unread_count: number
+}
+
+export interface RefreshResultItem {
+  feed_id: number
+  feed_name: string
+  new_articles: number
+  error: string | null
+}
+
+export interface RefreshResult {
+  refreshed_at: string
+  feeds: number
+  new_articles: number
+  results: RefreshResultItem[]
+}
+
+export interface ImportResult {
+  imported: number
+  skipped: number
+  failed: string[]
+  feeds: Feed[]
+}
+
+export interface FeedTestResult {
+  ok: boolean
+  url: string
+  item_count: number
+  error: string | null
+  sample_titles: string[]
 }
 
 export interface FxRate {

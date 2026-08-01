@@ -5,14 +5,20 @@ import { http } from '@/lib/api'
 import type {
   Account,
   AppConfig,
+  Article,
   Bank,
   DashboardSummary,
   Expense,
   ExpenseGroup,
+  Feed,
+  FeedGroup,
+  FeedTestResult,
   FxRate,
   FxSnapshot,
+  ImportResult,
   Income,
   IncomeSource,
+  RefreshResult,
 } from '@/types'
 
 export const keys = {
@@ -25,6 +31,8 @@ export const keys = {
   incomeSources: ['income-sources'] as const,
   incomes: ['incomes'] as const,
   fx: ['fx'] as const,
+  feedGroups: ['feed-groups'] as const,
+  articles: ['articles'] as const,
 }
 
 /** Anything that changes money invalidates the dashboard too. */
@@ -243,6 +251,122 @@ export function useBulkIncomeStatus() {
   return useInvalidating(
     (body: { ids: number[]; status: string }) => http.post<Income[]>('/incomes/bulk-status', body),
     INCOME_KEYS,
+  )
+}
+
+/* -------------------------------------------------------------------- news */
+
+const NEWS_KEYS = [keys.feedGroups, keys.articles] as const
+
+export interface ArticleFilters {
+  groupId?: number | null
+  feedId?: number | null
+  unreadOnly?: boolean
+  savedOnly?: boolean
+  search?: string
+}
+
+export function useFeedGroups() {
+  return useQuery({
+    queryKey: keys.feedGroups,
+    queryFn: () => http.get<FeedGroup[]>('/feed-groups'),
+  })
+}
+
+export function useArticles(filters: ArticleFilters = {}) {
+  const search = new URLSearchParams()
+  if (filters.groupId) search.set('group_id', String(filters.groupId))
+  if (filters.feedId) search.set('feed_id', String(filters.feedId))
+  if (filters.unreadOnly) search.set('unread_only', 'true')
+  if (filters.savedOnly) search.set('saved_only', 'true')
+  if (filters.search?.trim()) search.set('search', filters.search.trim())
+  const suffix = search.toString() ? `?${search}` : ''
+
+  return useQuery({
+    queryKey: [...keys.articles, suffix],
+    queryFn: () => http.get<Article[]>(`/articles${suffix}`),
+  })
+}
+
+export function useRefreshNews() {
+  return useInvalidating(
+    (feedId?: number) =>
+      http.post<RefreshResult>(`/news/refresh${feedId ? `?feed_id=${feedId}` : ''}`),
+    NEWS_KEYS,
+  )
+}
+
+export interface ImportPayload {
+  content: string
+  group_id?: number | null
+  new_group_name?: string | null
+  verify?: boolean
+}
+
+export function useImportFeeds() {
+  return useInvalidating(
+    (body: ImportPayload) => http.post<ImportResult>('/feeds/import', body),
+    NEWS_KEYS,
+  )
+}
+
+export function useTestFeed() {
+  return useMutation<FeedTestResult, Error, string>({
+    mutationFn: (url: string) => http.post<FeedTestResult>('/feeds/test', { url }),
+  })
+}
+
+export function useCreateFeedGroup() {
+  return useInvalidating(
+    (body: Record<string, unknown>) => http.post<FeedGroup>('/feed-groups', body),
+    NEWS_KEYS,
+  )
+}
+
+export function useUpdateFeedGroup() {
+  return useInvalidating(
+    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      http.patch<FeedGroup>(`/feed-groups/${id}`, body),
+    NEWS_KEYS,
+  )
+}
+
+export function useDeleteFeedGroup() {
+  return useInvalidating((id: number) => http.del<void>(`/feed-groups/${id}`), NEWS_KEYS)
+}
+
+export function useCreateFeed() {
+  return useInvalidating(
+    (body: Record<string, unknown>) => http.post<Feed>('/feeds', body),
+    NEWS_KEYS,
+  )
+}
+
+export function useUpdateFeed() {
+  return useInvalidating(
+    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      http.patch<Feed>(`/feeds/${id}`, body),
+    NEWS_KEYS,
+  )
+}
+
+export function useDeleteFeed() {
+  return useInvalidating((id: number) => http.del<void>(`/feeds/${id}`), NEWS_KEYS)
+}
+
+export function useUpdateArticle() {
+  return useInvalidating(
+    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      http.patch<Article>(`/articles/${id}`, body),
+    NEWS_KEYS,
+  )
+}
+
+export function useMarkAllRead() {
+  return useInvalidating(
+    (body: { group_id?: number | null; feed_id?: number | null }) =>
+      http.post<{ marked_read: number }>('/articles/mark-all-read', body),
+    NEWS_KEYS,
   )
 }
 

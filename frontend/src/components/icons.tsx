@@ -203,6 +203,52 @@ export const MoonIcon = (p: IconProps) => (
   </Svg>
 )
 
+/* ------------------------------------------------------------------- news */
+
+export const RssIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 11a9 9 0 0 1 9 9" />
+    <path d="M4 4a16 16 0 0 1 16 16" />
+    <circle cx="5" cy="19" r="1.5" />
+  </Svg>
+)
+
+export const ExternalLinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6" />
+    <path d="M20 4 11 13" />
+    <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
+  </Svg>
+)
+
+export const BookmarkIcon = ({ filled, ...p }: IconProps & { filled?: boolean }) => (
+  <Svg {...p} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M19 21l-7-4.5L5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />
+  </Svg>
+)
+
+export const ImportIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3v12" />
+    <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+    <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+  </Svg>
+)
+
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.5-3.5" />
+  </Svg>
+)
+
+export const MailOpenIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 9.5 12 4l9 5.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+    <path d="m3 9.5 9 6 9-6" />
+  </Svg>
+)
+
 /* ----------------------------------------------------------------- brand */
 
 export const WalletIcon = (p: IconProps) => (

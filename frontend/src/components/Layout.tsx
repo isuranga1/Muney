@@ -16,6 +16,7 @@ import {
   LogOutIcon,
   MenuIcon,
   MoonIcon,
+  RssIcon,
   SettingsIcon,
   SunIcon,
   WalletIcon,
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/banks', label: 'Banks & accounts', Icon: BankIcon },
   { to: '/expenses', label: 'Expenses', Icon: ExpenseIcon },
   { to: '/income', label: 'Income', Icon: IncomeIcon },
+  { to: '/news', label: 'News', Icon: RssIcon },
   { to: '/settings', label: 'Rates & settings', Icon: SettingsIcon },
 ]
 
