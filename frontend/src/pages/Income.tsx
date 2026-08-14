@@ -274,8 +274,10 @@ export default function IncomePage() {
         </div>
       )}
 
+      {/* Bulk action bar. Sits above the phone tab bar; on desktop there is no
+          tab bar, so it drops back to the bottom edge. */}
       {selected.size > 0 && (
-        <div className="glass-chrome fixed inset-x-0 bottom-0 z-40 border-t px-4 py-3 shadow-[0_-8px_32px_rgb(0_0_0/0.12)]">
+        <div className="glass-chrome fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t px-4 py-3 shadow-[0_-8px_32px_rgb(0_0_0/0.12)] lg:bottom-0">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-ink-2">{selected.size} selected</span>
             <div className="flex flex-wrap gap-2">
@@ -560,8 +562,67 @@ function SourceCard({
           {source.incomes.length === 0 ? 'Nothing recorded yet.' : 'Nothing matches this filter.'}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+        <>
+        {/* Phones get cards; the 720px table below is desktop only. */}
+        <ul className="divide-y divide-hairline md:hidden">
+          {visible.map((income) => {
+            const received = income.status === 'received'
+            return (
+              <li
+                key={income.id}
+                className={cx('px-4 py-3', income.status === 'cancelled' && 'opacity-55')}
+              >
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    className="mt-1"
+                    aria-label={`Select ${income.name}`}
+                    checked={selected.has(income.id)}
+                    onChange={() => onToggleSelect(income.id)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleReceived(income)}
+                      className="text-left"
+                    >
+                      <span className={cx('font-medium', received && 'text-muted line-through')}>
+                        {income.name}
+                      </span>
+                    </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <IncomeStatusBadge
+                        status={income.status}
+                        receivedDate={income.received_date}
+                        isLate={income.is_late}
+                      />
+                      <span>expected {shortDate(income.expected_date)}</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={cx('tabular font-semibold', received && 'line-through')}>
+                      {money(income.amount, income.currency)}
+                    </p>
+                    <p className="tabular text-xs text-muted">
+                      {income.rate_available ? money(income.converted_amount, base) : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 flex gap-2 pl-[30px]">
+                  <Button size="sm" variant="secondary" onClick={() => onEditIncome(income)}>
+                    Edit
+                  </Button>
+                  <ConfirmButton
+                    onConfirm={() => onDeleteIncome(income)}
+                    message={`Delete "${income.name}"?`}
+                  />
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+
+        <div className="scroll-x hidden md:block">
+          <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-muted">
                 <th className="w-10 px-5 py-2" />
@@ -650,6 +711,7 @@ function SourceCard({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <div className="border-t border-hairline px-5 py-3">

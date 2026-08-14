@@ -232,7 +232,9 @@ export function Modal({
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+    // Phones: the sheet sits at the bottom of the screen within thumb reach and
+    // spans the full width. From sm up it becomes a centred dialog.
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto sm:items-start sm:p-8">
       {/* Scrim doubles as the dismiss target; blurring it pushes the page back. */}
       <div
         className="animate-fade fixed inset-0 bg-black/25 backdrop-blur-md dark:bg-black/50"
@@ -243,7 +245,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="glass-raised animate-pop relative z-10 my-auto w-full max-w-lg rounded-[1.5rem]"
+        className="glass-raised animate-pop relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-t-[1.5rem] pb-[env(safe-area-inset-bottom)] sm:my-auto sm:max-w-lg sm:rounded-[1.5rem] sm:pb-0"
       >
         <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
           <h2 className="text-base font-semibold tracking-[-0.01em] text-ink">{title}</h2>

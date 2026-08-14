@@ -48,6 +48,8 @@ services:
       FX_FALLBACK_API_URL: ${FX_FALLBACK_API_URL:-https://latest.currency-api.pages.dev/v1/currencies/usd.json}
       FX_PIVOT_CURRENCY: ${FX_PIVOT_CURRENCY:-USD}
       FX_STALE_AFTER_HOURS: ${FX_STALE_AFTER_HOURS:-12}
+      NEWS_REFRESH_MINUTES: ${NEWS_REFRESH_MINUTES:-30}
+      NEWS_RETENTION_DAYS: ${NEWS_RETENTION_DAYS:-60}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       TZ: ${TZ:-Asia/Colombo}
     ports:

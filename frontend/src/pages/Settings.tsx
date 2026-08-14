@@ -76,8 +76,8 @@ export default function Settings() {
           )
         }
       >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
+        <div className="scroll-x">
+          <table className="w-full min-w-[420px] text-sm">
             <thead>
               <tr className="text-xs text-muted">
                 <th className="py-2 text-left font-medium">Currency</th>

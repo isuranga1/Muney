@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 
@@ -14,7 +13,6 @@ import {
   ExpenseIcon,
   IncomeIcon,
   LogOutIcon,
-  MenuIcon,
   MoonIcon,
   RssIcon,
   SettingsIcon,
@@ -23,45 +21,54 @@ import {
 } from '@/components/icons'
 
 // Add a page: one entry here plus a <Route> in App.tsx.
+// `short` is what the phone tab bar shows — six tabs on a 390px screen leaves
+// roughly 65px each, so the long labels do not fit.
 const NAV = [
-  { to: '/', label: 'Dashboard', Icon: DashboardIcon },
-  { to: '/banks', label: 'Banks & accounts', Icon: BankIcon },
-  { to: '/expenses', label: 'Expenses', Icon: ExpenseIcon },
-  { to: '/income', label: 'Income', Icon: IncomeIcon },
-  { to: '/news', label: 'News', Icon: RssIcon },
-  { to: '/settings', label: 'Rates & settings', Icon: SettingsIcon },
+  { to: '/', label: 'Dashboard', short: 'Home', Icon: DashboardIcon },
+  { to: '/banks', label: 'Banks & accounts', short: 'Banks', Icon: BankIcon },
+  { to: '/expenses', label: 'Expenses', short: 'Expenses', Icon: ExpenseIcon },
+  { to: '/income', label: 'Income', short: 'Income', Icon: IncomeIcon },
+  { to: '/news', label: 'News', short: 'News', Icon: RssIcon },
+  { to: '/settings', label: 'Rates & settings', short: 'Settings', Icon: SettingsIcon },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth()
   const { dark, toggle } = useTheme()
   const fx = useFx()
-  const [navOpen, setNavOpen] = useState(false)
 
   return (
-    <div className="flex min-h-full flex-col lg:flex-row lg:gap-0">
-      {/* Mobile chrome */}
-      <header className="glass-chrome sticky top-0 z-30 flex items-center justify-between border-b px-4 py-3 lg:hidden">
-        <span className="flex items-center gap-2 text-lg font-semibold tracking-[-0.02em]">
+    <div className="flex min-h-full flex-col lg:flex-row">
+      {/* ---------------------------------------------------- phone top bar */}
+      <header className="glass-chrome pad-safe-top inset-safe-x sticky top-0 z-30 flex items-center justify-between border-b px-4 lg:hidden">
+        <span className="flex items-center gap-2 py-3 text-lg font-semibold tracking-[-0.02em]">
           <WalletIcon size={20} className="text-series-1" />
           Muney
         </span>
-        <Button size="sm" variant="secondary" onClick={() => setNavOpen((open) => !open)}>
-          <MenuIcon size={16} />
-          {navOpen ? 'Close' : 'Menu'}
-        </Button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="grid size-11 place-items-center rounded-full text-ink-2 active:bg-black/10 dark:active:bg-white/10"
+          >
+            {dark ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+          </button>
+          <button
+            type="button"
+            onClick={logout}
+            aria-label="Sign out"
+            className="grid size-11 place-items-center rounded-full text-ink-2 active:bg-black/10 dark:active:bg-white/10"
+          >
+            <LogOutIcon size={18} />
+          </button>
+        </div>
       </header>
 
-      {/* The sidebar floats as its own pane of glass rather than sitting flush. */}
-      <aside
-        className={cx(
-          'z-20 shrink-0 lg:sticky lg:top-4 lg:m-4 lg:mr-0 lg:block lg:h-[calc(100vh-2rem)] lg:w-64',
-          'glass rounded-none lg:rounded-glass',
-          navOpen ? 'block' : 'hidden',
-        )}
-      >
+      {/* ------------------------------------------------- desktop sidebar */}
+      <aside className="glass z-20 hidden shrink-0 lg:sticky lg:top-4 lg:m-4 lg:mr-0 lg:block lg:h-[calc(100vh-2rem)] lg:w-64 lg:rounded-glass">
         <div className="flex h-full flex-col">
-          <div className="hidden px-5 pt-6 pb-5 lg:block">
+          <div className="px-5 pt-6 pb-5">
             <span className="flex items-center gap-2.5 text-xl font-semibold tracking-[-0.02em]">
               <span className="glass-inset grid size-8 place-items-center rounded-xl text-series-1">
                 <WalletIcon size={17} />
@@ -71,13 +78,12 @@ export default function Layout({ children }: { children: ReactNode }) {
             <p className="mt-1.5 text-xs text-muted">Personal finance board</p>
           </div>
 
-          <nav className="stagger flex flex-col gap-1 px-3 py-3 lg:py-0">
+          <nav className="stagger flex flex-col gap-1 px-3">
             {NAV.map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={to === '/'}
-                onClick={() => setNavOpen(false)}
                 className={({ isActive }) =>
                   cx(
                     'spring group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm',
@@ -136,9 +142,42 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8">
+      {/* Bottom padding clears the phone tab bar; the calc keeps content off
+          the home indicator on notched devices. */}
+      <main className="inset-safe-x min-w-0 flex-1 px-4 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
+
+      {/* -------------------------------------------------- phone tab bar */}
+      <nav
+        aria-label="Main"
+        className="glass-chrome pad-safe-bottom inset-safe-x fixed inset-x-0 bottom-0 z-40 border-t lg:hidden"
+      >
+        <ul className="flex">
+          {NAV.map(({ to, short, Icon }) => (
+            <li key={to} className="flex-1">
+              <NavLink
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  cx(
+                    // min-h-14 keeps every tab at/above the 44pt touch target.
+                    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5',
+                    isActive ? 'text-series-1' : 'text-muted',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon size={20} strokeWidth={isActive ? 2.2 : 1.75} />
+                    <span className={cx('text-[10px]', isActive && 'font-semibold')}>{short}</span>
+                  </>
+                )}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </div>
   )
 }

@@ -83,6 +83,48 @@ body::before {
   font-variant-numeric: tabular-nums;
 }
 
+/* ------------------------------------------------------------------ mobile */
+
+/* iOS Safari zooms the whole page when you focus a field whose font-size is
+   under 16px, and never zooms back out. Unlayered so it beats Tailwind's
+   text-sm utility; only applies on phone-width screens. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Safe areas: the page paints edge to edge (viewport-fit=cover), so anything
+   pinned to an edge has to add the inset back or it lands under the notch,
+   the home indicator, or the rounded corners. */
+.pad-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pad-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.inset-safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Momentum scrolling inside horizontally scrollable regions. */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* On a touch device a :hover style sticks after a tap until you tap elsewhere,
+   which reads as a stuck selection. Only apply lift effects to real pointers. */
+@media (hover: none) {
+  .hover\:-translate-y-0\.5:hover {
+    transform: none;
+  }
+}
+
 ::selection {
   background-color: color-mix(in oklab, var(--series-1) 30%, transparent);
 }

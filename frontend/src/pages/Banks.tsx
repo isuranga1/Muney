@@ -17,6 +17,7 @@ import {
   Select,
   Spinner,
   Textarea,
+  cx,
 } from '@/components/ui'
 import { money, seriesColor, titleCase } from '@/lib/format'
 import {
@@ -398,7 +399,7 @@ function BankCard({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center justify-between gap-3 sm:w-auto">
           <div className="text-right">
             <p className="text-xs text-muted">Total in {base}</p>
             <p className="tabular text-lg font-semibold">{money(bank.total_converted, base)}</p>
@@ -425,8 +426,50 @@ function BankCard({
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+          {/* Phones: one card per account. A 640px-wide table would mean
+              side-scrolling on every row. */}
+          <ul className="divide-y divide-hairline md:hidden">
+            {bank.accounts.map((account) => (
+              <li
+                key={account.id}
+                className={cx('px-4 py-3', !account.is_active && 'opacity-55')}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium">{account.name}</span>
+                      {account.is_liability && <LiabilityBadge />}
+                      {!account.is_active && <InactiveBadge />}
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {titleCase(account.account_type)}
+                      {account.account_number ? ` · ${account.account_number}` : ''}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="tabular font-semibold">
+                      {money(account.balance, account.currency)}
+                    </p>
+                    <p className="tabular text-xs text-muted">
+                      {account.rate_available ? money(account.converted_balance, base) : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => onEditAccount(account)}>
+                    Edit
+                  </Button>
+                  <ConfirmButton
+                    onConfirm={() => onDeleteAccount(account)}
+                    message={`Delete account "${account.name}"?`}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="scroll-x hidden md:block">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-muted">
                   <th className="px-5 py-2 text-left font-medium">Account</th>

@@ -2,14 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page paint under the notch and home
+         indicator; the layout then pads itself back with env(safe-area-inset-*).
+         maximum-scale is deliberately NOT set — capping zoom breaks pinch-zoom
+         for anyone who needs it. Input font-size handles the auto-zoom instead. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <!-- iOS ignores SVG here, so Add to Home Screen needs a real PNG. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Muney" />
+    <!-- black-translucent = the app paints its own background behind the status bar. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
     <meta name="theme-color" content="#eef0f4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#08080a" media="(prefers-color-scheme: dark)" />
-    <meta name="description" content="Personal finance board — banks, accounts, expenses and income." />
+    <meta
+      name="description"
+      content="Personal finance board — banks, accounts, expenses, income and news."
+    />
 
     <title>Muney</title>
     <script>
