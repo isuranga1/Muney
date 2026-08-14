@@ -38,9 +38,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   const fx = useFx()
 
   return (
-    <div className="flex min-h-full flex-col lg:flex-row">
+    // Horizontal safe-area is applied once here, on the outermost box, so inner
+    // elements keep their own padding untouched. It is 0 in portrait and only
+    // bites in landscape, where the notch eats into one side.
+    <div className="flex min-h-full flex-col pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:flex-row">
       {/* ---------------------------------------------------- phone top bar */}
-      <header className="glass-chrome pad-safe-top inset-safe-x sticky top-0 z-30 flex items-center justify-between border-b px-4 lg:hidden">
+      <header className="glass-chrome pad-safe-top sticky top-0 z-30 flex items-center justify-between border-b px-4 lg:hidden">
         <span className="flex items-center gap-2 py-3 text-lg font-semibold tracking-[-0.02em]">
           <WalletIcon size={20} className="text-series-1" />
           Muney
@@ -144,14 +147,15 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       {/* Bottom padding clears the phone tab bar; the calc keeps content off
           the home indicator on notched devices. */}
-      <main className="inset-safe-x min-w-0 flex-1 px-4 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
+      <main className="min-w-0 flex-1 px-4 py-5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
 
       {/* -------------------------------------------------- phone tab bar */}
       <nav
         aria-label="Main"
-        className="glass-chrome pad-safe-bottom inset-safe-x fixed inset-x-0 bottom-0 z-40 border-t lg:hidden"
+        // Fixed, so it sits outside the root's padding and needs its own.
+        className="glass-chrome pad-safe-bottom fixed inset-x-0 bottom-0 z-40 border-t pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden"
       >
         <ul className="flex">
           {NAV.map(({ to, short, Icon }) => (

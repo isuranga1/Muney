@@ -98,16 +98,19 @@ body::before {
 
 /* Safe areas: the page paints edge to edge (viewport-fit=cover), so anything
    pinned to an edge has to add the inset back or it lands under the notch,
-   the home indicator, or the rounded corners. */
+   the home indicator, or the rounded corners.
+
+   These only ever set padding on an axis that no Tailwind utility is also
+   setting on the same element. That matters: this file's rules are UNLAYERED,
+   and unlayered CSS outranks everything in @layer utilities — so a helper like
+   `padding-inline: env(...)` would silently defeat `px-4` and collapse the
+   padding to zero in portrait, where the inset is 0. Horizontal safe-area is
+   handled with arbitrary Tailwind values at the call site instead. */
 .pad-safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .pad-safe-top {
   padding-top: env(safe-area-inset-top, 0px);
-}
-.inset-safe-x {
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Momentum scrolling inside horizontally scrollable regions. */
