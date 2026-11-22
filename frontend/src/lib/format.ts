@@ -87,3 +87,49 @@ export const SERIES = [
 export function seriesColor(index: number): string {
   return SERIES[Math.min(index, SERIES.length - 1)]
 }
+
+export const MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
+export function monthLabel(year: number, month: number, long = true): string {
+  return new Date(year, month - 1, 1).toLocaleDateString('en-GB', {
+    month: long ? 'long' : 'short',
+    year: 'numeric',
+  })
+}
+
+export function dayLabel(value: string): string {
+  const parsed = new Date(`${value}T00:00:00`)
+  const now = new Date()
+  const diff = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - parsed.getTime()) /
+      86_400_000,
+  )
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Yesterday'
+  return parsed.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+export function percent(value: number | null | undefined, digits = 0): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+  return `${value.toFixed(digits)}%`
+}
+
+/** Local YYYY-MM-DD — toISOString() would give the UTC date. */
+export function localDate(value: Date | string = new Date()): string {
+  const d = typeof value === 'string' ? new Date(value) : value
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}

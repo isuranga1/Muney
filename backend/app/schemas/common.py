@@ -26,32 +26,28 @@ CurrencyCode = Annotated[str, AfterValidator(_normalize_currency)]
 class AccountType(str, Enum):
     savings = "savings"
     current = "current"
-    fixed_deposit = "fixed_deposit"
     credit_card = "credit_card"
-    investment = "investment"
+    cash = "cash"
     wallet = "wallet"
+    investment = "investment"
+    fixed_deposit = "fixed_deposit"
     loan = "loan"
-    other = "other"
 
 
-class ExpenseStatus(str, Enum):
-    pending = "pending"
-    paid = "paid"
-    cancelled = "cancelled"
+class TransactionKind(str, Enum):
+    expense = "expense"
+    income = "income"
+    transfer = "transfer"
 
 
-class IncomeStatus(str, Enum):
-    expected = "expected"
-    received = "received"
-    cancelled = "cancelled"
+class CategoryKind(str, Enum):
+    expense = "expense"
+    income = "income"
 
 
-class Recurrence(str, Enum):
-    none = "none"
-    weekly = "weekly"
-    monthly = "monthly"
-    quarterly = "quarterly"
-    yearly = "yearly"
+class GoalType(str, Enum):
+    save = "save"
+    spend = "spend"
 
 
 class ORMModel(BaseModel):

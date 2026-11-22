@@ -282,3 +282,113 @@ docker compose up -d
   start, so `./deploy.sh` (or `docker compose up -d`) is required.
   `VITE_API_BASE_URL` is the one baked at *build* time, needing
   `docker compose up -d --build web`.
+
+## 9. Forwarding bank SMS from an iPhone
+
+Every bank SMS your iPhone forwards goes to `POST /api/ingest/sms`. The
+backend saves it right away and reads it in the background, so the
+Shortcut never waits:
+
+1. **Regex parsers** (`backend/app/services/sms_parser.py`). These are
+   instant and exact. Out of the box they read HNB's three formats:
+   debit/credit alerts, the ATM e-receipt, and the "SMS ALERT: PURCHASE"
+   message. They also drop real OTPs, declined payments and bill reminders.
+2. **The on-board LLM**, for anything no parser knows: llama.cpp's
+   `llama-server` running Qwen2.5-1.5B in the `llm` container, on the Pi,
+   with no internet needed. It pulls out the amount, currency, merchant,
+   account number and balance. Every number it reports is checked against
+   the SMS text; if anything doesn't add up, the SMS waits in the inbox
+   instead of being recorded wrong.
+3. **Categorising.** First your learned merchant rules (anything you've
+   recategorised by hand), then category keywords, then the model's pick.
+4. **Recording.** The transaction is saved and the account is set to the
+   balance the bank reported. An ATM fee becomes its own expense under
+   *Fees & charges*. A debit on one of your accounts and a credit on
+   another at the same moment (USD 50 out, LKR 16,457.50 in) become **one
+   transfer**, so moving money around never shows up as spending or income.
+
+Anything that couldn't be read waits in **SMS inbox → Needs review**.
+
+### Server
+
+In `.env`:
+
+```bash
+INGEST_TOKEN=<openssl rand -hex 24>
+LLM_PROVIDER=llamacpp          # the default
+```
+
+`./deploy.sh`. On first start the `llm` container downloads the model
+(about 1.1 GB, into the `llm_models` volume). It's ready when
+`docker compose logs llm` shows the server listening. After that it loads
+in seconds and stays in RAM (about 1.3 GB).
+
+- **Speed:** each SMS the model reads takes a few seconds; expect roughly
+  10–20 s on a Pi 5 and longer on a Pi 4. It runs in the background, so
+  nothing waits on it. HNB messages skip the model entirely.
+- **Web UI:** llama.cpp's own chat page is at `http://<pi>:8090`
+  (`MUNEY_LLM_PORT`), handy for trying a tricky SMS by hand.
+- **Try another model:** set `LLM_HF_MODEL` (a Hugging Face
+  `<user>/<repo>:<quant>`) and `LLM_MODEL` (its display name) in `.env`,
+  then `docker compose up -d llm`. Measure it on your own messages before
+  committing to it:
+
+  ```bash
+  docker compose exec backend python scripts/llm_bench.py
+  docker compose exec backend python scripts/llm_bench.py --llm-only   # model alone, no parsers
+  ```
+
+- **Not on the Pi:** `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`
+  uses Claude Haiku 5.5 instead (SMS text then leaves the Pi; stop the
+  `llm` container to save its RAM). `LLM_PROVIDER=none` means parsers only.
+
+Test it end to end:
+
+```bash
+curl -X POST http://localhost:8080/api/ingest/sms \
+  -H 'X-Ingest-Token: <token>' -H 'Content-Type: application/json' \
+  -d '{"message":"LKR 50.00 debited to Ac No:09802XXXXX06 on 22/11/26 10:29:06 Reason:MB BillPmt/Hutch Bal:LKR 81.65","sender":"HNB"}'
+```
+
+It appears in the inbox as "recorded" within a second (a parser read it).
+
+### iPhone
+
+1. **Tailscale**: sign in to the same tailnet and turn on
+   **Settings → VPN → Tailscale → Connect On Demand**, so the tunnel is up
+   whenever the automation runs.
+2. **Shortcuts → Automation → + → Message**:
+   - *Sender*: your bank's SMS name (e.g. `HNB`). Make one automation per bank.
+   - *Message contains*: leave empty. The backend skips non-transactions
+     itself.
+   - **Run Immediately** (turn off "Notify When Run" if you like).
+3. Add the action **Get Contents of URL**:
+   - URL: `http://<pi-magicdns-name>:8080/api/ingest/sms`
+   - Method: `POST`
+   - Headers: `X-Ingest-Token` = your token
+   - Request Body: **JSON**
+     - `message` (Text) = *Shortcut Input → Content*
+     - `sender` (Text) = *Shortcut Input → Sender*
+     - `received_at` (Text) = *Current Date*, formatted as **ISO 8601**
+4. Send yourself a test, or wait for a real transaction, and check the inbox.
+
+The same SMS forwarded twice within `INGEST_DEDUPE_MINUTES` (default 10) is
+only stored once.
+
+### Accounts
+
+On the Accounts page, enter each account's **number**: the full number is
+best, or at least the last 4 digits. Banks print it masked, and differently
+in different messages. HNB shows one savings account as both `09802XXXXX06`
+and `0980***2106`. Both match an account stored as `…2106`, and when only a
+couple of digits are visible, the SMS's currency decides between your LKR
+and USD accounts. A message that matches no account is still recorded, but
+no balance moves, and the inbox says so.
+
+### Adding a regex parser
+
+When a bank you use regularly isn't covered, add a parser for it in
+`sms_parser.py`. The HNB ones are worked examples. Add a sample of the
+message to `backend/scripts/sms_samples.json` and run `llm_bench.py` to
+check it, deploy, then press **SMS inbox → Re-run** to process anything
+still waiting.

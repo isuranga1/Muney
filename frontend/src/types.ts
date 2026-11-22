@@ -1,12 +1,13 @@
 export interface AppConfig {
   app_name: string
   base_currency: string
+  secondary_currency: string | null
   supported_currencies: string[]
   account_types: string[]
-  expense_statuses: string[]
-  income_statuses: string[]
-  recurrences: string[]
   news_refresh_minutes: number
+  ingest_enabled: boolean
+  llm_provider: 'none' | 'anthropic' | 'llamacpp'
+  llm_model: string | null
 }
 
 export interface User {
@@ -27,106 +28,212 @@ export interface AuthStatus {
   registration_open: boolean
 }
 
+/* ---------------------------------------------------------------- accounts */
+
 export interface Account {
   id: number
-  bank_id: number
   name: string
+  institution: string | null
   account_type: string
   currency: string
   balance: number
-  account_number: string | null
+  last_digits: string | null
+  color: string | null
   notes: string | null
+  bucket_id: number | null
+  include_in_total: boolean
+  is_archived: boolean
   sort_order: number
-  is_active: boolean
   is_liability: boolean
-  converted_balance: number | null
-  converted_currency: string | null
-  rate_available: boolean
+  base_balance: number | null
+  secondary_balance: number | null
 }
 
-export interface Bank {
-  id: number
-  name: string
-  short_name: string | null
-  country: string | null
-  color: string | null
-  notes: string | null
-  sort_order: number
-  is_archived: boolean
+export interface CurrencyTotal {
+  currency: string
+  total: number
+  base_total: number | null
+  account_count: number
+}
+
+export interface AccountsOverview {
+  base_currency: string
+  secondary_currency: string | null
+  net_worth: number
+  net_worth_secondary: number | null
+  assets: number
+  liabilities: number
+  by_currency: CurrencyTotal[]
   accounts: Account[]
-  total_converted: number
-  converted_currency: string | null
+  unconvertible: string[]
 }
 
-export interface Expense {
+/* -------------------------------------------------------------- categories */
+
+export type CategoryKind = 'expense' | 'income'
+
+export interface Category {
   id: number
-  group_id: number | null
   name: string
+  kind: CategoryKind
+  icon: string | null
+  color: string | null
+  keywords: string | null
+  bucket_id: number | null
+  origin: 'system' | 'user' | 'llm'
+  is_archived: boolean
+  sort_order: number
+}
+
+/* ------------------------------------------------------------ transactions */
+
+export type TransactionKind = 'expense' | 'income' | 'transfer'
+
+export interface Transaction {
+  id: number
+  kind: TransactionKind
   amount: number
   currency: string
-  status: string
-  due_date: string | null
-  paid_date: string | null
-  recurrence: string
+  base_amount: number | null
+  occurred_on: string
+  occurred_at: string | null
   account_id: number | null
-  vendor: string | null
-  notes: string | null
-  converted_amount: number | null
-  converted_currency: string | null
-  rate_available: boolean
-  is_overdue: boolean
+  account_delta: number | null
+  to_account_id: number | null
+  to_account_delta: number | null
+  category_id: number | null
+  merchant: string | null
+  note: string | null
+  source: 'manual' | 'sms'
+  categorized_by: 'user' | 'rule' | 'keyword' | 'llm' | null
+  created_at: string
 }
 
-export interface ExpenseGroup {
+export interface TransactionFilters {
+  year?: number
+  month?: number
+  kind?: TransactionKind
+  category_id?: number
+  uncategorized?: boolean
+  account_id?: number
+  q?: string
+  limit?: number
+}
+
+/* ------------------------------------------------------------------ budget */
+
+export interface Bucket {
   id: number
   name: string
-  description: string | null
+  percent: number
+  goal_type: 'save' | 'spend'
   color: string | null
   sort_order: number
-  is_archived: boolean
-  expenses: Expense[]
-  converted_currency: string | null
-  total_converted: number
-  paid_converted: number
-  outstanding_converted: number
-  expense_count: number
-  paid_count: number
 }
 
-export interface Income {
-  id: number
-  source_id: number | null
+export interface BucketStatus {
+  bucket_id: number
   name: string
+  color: string | null
+  goal_type: 'save' | 'spend'
+  percent: number
+  target: number
+  actual: number
+  progress: number
+  on_track: boolean | null
+  actual_percent: number | null
+}
+
+export interface BudgetMonthStatus {
+  year: number
+  month: number
+  base_currency: string
+  income_actual: number
+  income_basis: number
+  basis_is_override: boolean
+  total_percent: number
+  buckets: BucketStatus[]
+  unassigned_spend: number
+  on_track_count: number
+}
+
+/* ----------------------------------------------------------------- reports */
+
+export interface CategoryTotal {
+  category_id: number | null
+  name: string
+  icon: string | null
+  color: string | null
+  total: number
+  count: number
+  share: number
+}
+
+export interface MonthReport {
+  year: number
+  month: number
+  base_currency: string
+  secondary_currency: string | null
+  secondary_rate: number | null
+  income: number
+  expense: number
+  net: number
+  savings_rate: number | null
+  transaction_count: number
+  expense_by_category: CategoryTotal[]
+  income_by_category: CategoryTotal[]
+  by_day: { day: string; income: number; expense: number }[]
+  previous_income: number
+  previous_expense: number
+}
+
+export interface CategoryYearRow {
+  category_id: number | null
+  name: string
+  icon: string | null
+  color: string | null
+  total: number
+  months: number[]
+}
+
+export interface YearReport {
+  year: number
+  base_currency: string
+  income: number
+  expense: number
+  net: number
+  months: { month: number; income: number; expense: number; net: number }[]
+  expense_categories: CategoryYearRow[]
+  income_categories: CategoryYearRow[]
+}
+
+/* ------------------------------------------------------------------- inbox */
+
+export interface SmsMessage {
+  id: number
+  body: string
+  sender: string | null
+  received_at: string
+  status: 'queued' | 'pending' | 'processed' | 'ignored' | 'failed'
+  parsed_by: 'regex' | 'llm' | 'manual' | null
+  error: string | null
+  processed_at: string | null
+  transaction_id: number | null
+}
+
+/** Body for recording an SMS by hand. */
+export interface ParsedSms {
+  kind: TransactionKind
   amount: number
   currency: string
-  status: string
-  expected_date: string | null
-  received_date: string | null
-  recurrence: string
-  account_id: number | null
-  payer: string | null
-  notes: string | null
-  converted_amount: number | null
-  converted_currency: string | null
-  rate_available: boolean
-  is_late: boolean
+  merchant?: string | null
+  occurred_on?: string | null
+  account_id?: number | null
+  to_account_id?: number | null
+  category_id?: number | null
 }
 
-export interface IncomeSource {
-  id: number
-  name: string
-  description: string | null
-  color: string | null
-  sort_order: number
-  is_archived: boolean
-  incomes: Income[]
-  converted_currency: string | null
-  total_converted: number
-  received_converted: number
-  expected_converted: number
-  income_count: number
-  received_count: number
-}
+/* -------------------------------------------------------------------- news */
 
 export interface Article {
   id: number
@@ -216,57 +323,4 @@ export interface FxSnapshot {
   is_stale: boolean
   last_updated: string | null
   missing_currencies: string[]
-}
-
-export interface CurrencyBreakdown {
-  currency: string
-  original_total: number
-  converted_total: number
-  account_count: number
-  rate_available: boolean
-}
-
-export interface BankBreakdown {
-  bank_id: number
-  bank_name: string
-  color: string | null
-  converted_total: number
-  account_count: number
-}
-
-export interface GroupBreakdown {
-  group_id: number | null
-  group_name: string
-  color: string | null
-  converted_total: number
-  paid_converted: number
-  outstanding_converted: number
-}
-
-export interface PeriodSummary {
-  period_start: string
-  period_end: string
-  income_received: number
-  income_expected: number
-  expenses_paid: number
-  expenses_outstanding: number
-  net_actual: number
-  net_projected: number
-}
-
-export interface DashboardSummary {
-  base_currency: string
-  fx_is_stale: boolean
-  assets_total: number
-  liabilities_total: number
-  net_worth: number
-  account_count: number
-  bank_count: number
-  by_currency: CurrencyBreakdown[]
-  by_bank: BankBreakdown[]
-  expenses_by_group: GroupBreakdown[]
-  this_month: PeriodSummary
-  overdue_total: number
-  overdue_count: number
-  unconvertible_currencies: string[]
 }

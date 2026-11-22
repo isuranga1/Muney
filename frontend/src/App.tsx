@@ -2,10 +2,11 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import Layout from '@/components/Layout'
 import { useAuth } from '@/lib/auth'
-import Banks from '@/pages/Banks'
-import Dashboard from '@/pages/Dashboard'
-import Expenses from '@/pages/Expenses'
-import IncomePage from '@/pages/Income'
+import Accounts from '@/pages/Accounts'
+import Activity from '@/pages/Activity'
+import Budget from '@/pages/Budget'
+import Home from '@/pages/Home'
+import Inbox from '@/pages/Inbox'
 import Login from '@/pages/Login'
 import News from '@/pages/News'
 import Settings from '@/pages/Settings'
@@ -26,10 +27,11 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/banks" element={<Banks />} />
-        <Route path="/expenses" element={<Expenses />} />
-        <Route path="/income" element={<IncomePage />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/accounts" element={<Accounts />} />
+        <Route path="/activity" element={<Activity />} />
+        <Route path="/budget" element={<Budget />} />
+        <Route path="/inbox" element={<Inbox />} />
         <Route path="/news" element={<News />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />

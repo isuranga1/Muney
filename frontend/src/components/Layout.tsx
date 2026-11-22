@@ -10,26 +10,28 @@ import {
   AlertTriangleIcon,
   BankIcon,
   DashboardIcon,
-  ExpenseIcon,
-  IncomeIcon,
+  InboxIcon,
+  ListIcon,
   LogOutIcon,
   MoonIcon,
   RssIcon,
   SettingsIcon,
   SunIcon,
+  TargetIcon,
   WalletIcon,
 } from '@/components/icons'
 
 // Add a page: one entry here plus a <Route> in App.tsx.
-// `short` is what the phone tab bar shows — six tabs on a 390px screen leaves
-// roughly 65px each, so the long labels do not fit.
+// `short` is what the phone tab bar shows — seven tabs on a 390px screen leaves
+// roughly 55px each, so the long labels do not fit.
 const NAV = [
-  { to: '/', label: 'Dashboard', short: 'Home', Icon: DashboardIcon },
-  { to: '/banks', label: 'Banks & accounts', short: 'Banks', Icon: BankIcon },
-  { to: '/expenses', label: 'Expenses', short: 'Expenses', Icon: ExpenseIcon },
-  { to: '/income', label: 'Income', short: 'Income', Icon: IncomeIcon },
+  { to: '/', label: 'Overview', short: 'Home', Icon: DashboardIcon },
+  { to: '/accounts', label: 'Accounts', short: 'Accounts', Icon: BankIcon },
+  { to: '/activity', label: 'Activity', short: 'Activity', Icon: ListIcon },
+  { to: '/budget', label: 'Budget rule', short: 'Budget', Icon: TargetIcon },
+  { to: '/inbox', label: 'SMS inbox', short: 'Inbox', Icon: InboxIcon },
   { to: '/news', label: 'News', short: 'News', Icon: RssIcon },
-  { to: '/settings', label: 'Rates & settings', short: 'Settings', Icon: SettingsIcon },
+  { to: '/settings', label: 'Settings', short: 'Settings', Icon: SettingsIcon },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {

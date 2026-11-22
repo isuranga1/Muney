@@ -5,10 +5,21 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, banks, dashboard, expenses, fx, income, meta, news
+from app.api.routes import (
+    accounts,
+    auth,
+    budget,
+    categories,
+    fx,
+    inbox,
+    meta,
+    news,
+    reports,
+    transactions,
+)
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.services import rss
+from app.services import ingest, llm, rss
 from app.services.fx import refresh_if_stale
 
 logger = logging.getLogger("muney")
@@ -55,6 +66,19 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 - never block startup on rates or a cold DB
         logger.warning("Skipped FX warm-up: %s", exc)
 
+    # In the background: download/load the on-board model, then finish any SMS
+    # that were still `queued` when the app last stopped. Never blocks startup.
+    def _prepare_inbox() -> None:
+        try:
+            llm.warm_up()
+            resumed = ingest.process_queued()
+            if resumed:
+                logger.info("Processed %s queued SMS left over from before restart", resumed)
+        except Exception as exc:  # noqa: BLE001 - a cold model must not take the API down
+            logger.warning("Inbox warm-up failed: %s", exc)
+
+    warmup = asyncio.create_task(asyncio.to_thread(_prepare_inbox))
+
     task: asyncio.Task | None = None
     if settings.news_refresh_minutes > 0:
         task = asyncio.create_task(_news_refresh_loop())
@@ -62,6 +86,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    if not warmup.done():
+        # The thread can't be interrupted; just stop waiting on it.
+        logger.info("Shutting down while the model was still warming up")
     if task is not None:
         task.cancel()
         with suppress(asyncio.CancelledError):
@@ -70,7 +97,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=f"{settings.app_name} API",
-    description="Personal finance board — banks, accounts, expenses, income and news.",
+    description="Personal finance — accounts, transactions, budget rule, SMS ingest and news.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -83,7 +110,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (meta, auth, banks, expenses, income, news, fx, dashboard):
+for module in (
+    meta,
+    auth,
+    accounts,
+    categories,
+    transactions,
+    budget,
+    reports,
+    inbox,
+    news,
+    fx,
+):
     app.include_router(module.router, prefix=settings.api_prefix)
 
 

@@ -9,16 +9,13 @@
  */
 import { Badge } from '@/components/ui'
 import {
-  AlertCircleIcon,
   AlertTriangleIcon,
-  BanIcon,
   CheckIcon,
-  ClockIcon,
   DebtIcon,
   PauseIcon,
   PencilIcon,
+  SparklesIcon,
 } from '@/components/icons'
-import { shortDate } from '@/lib/format'
 
 const ICON = { size: 12, strokeWidth: 2.5 } as const
 
@@ -59,68 +56,31 @@ export function InactiveBadge() {
   return <Badge icon={<PauseIcon {...ICON} />}>inactive</Badge>
 }
 
-export function ExpenseStatusBadge({
-  status,
-  paidDate,
-  isOverdue,
-}: {
-  status: string
-  paidDate: string | null
-  isOverdue: boolean
-}) {
-  if (status === 'paid') {
-    return (
-      <Badge tone="good" icon={<CheckIcon {...ICON} />}>
-        Paid{paidDate ? ` ${shortDate(paidDate)}` : ''}
-      </Badge>
-    )
-  }
-  if (status === 'cancelled') {
-    return <Badge icon={<BanIcon {...ICON} />}>Cancelled</Badge>
-  }
-  if (isOverdue) {
-    return (
-      <Badge tone="critical" icon={<AlertCircleIcon {...ICON} />}>
-        Overdue
-      </Badge>
-    )
-  }
+/** A category the LLM made up, waiting for you to keep or rename it. */
+export function LlmBadge({ label = 'AI' }: { label?: string }) {
   return (
-    <Badge tone="info" icon={<ClockIcon {...ICON} />}>
-      Pending
+    <Badge tone="info" icon={<SparklesIcon {...ICON} />}>
+      {label}
     </Badge>
   )
 }
 
-export function IncomeStatusBadge({
-  status,
-  receivedDate,
-  isLate,
-}: {
-  status: string
-  receivedDate: string | null
-  isLate: boolean
-}) {
-  if (status === 'received') {
+/** Budget bucket state for the month. `null` = no income to measure against yet. */
+export function GoalBadge({ onTrack, goalType }: { onTrack: boolean | null; goalType: string }) {
+  if (onTrack === null) return <Badge>no income yet</Badge>
+  if (onTrack) {
     return (
       <Badge tone="good" icon={<CheckIcon {...ICON} />}>
-        Received{receivedDate ? ` ${shortDate(receivedDate)}` : ''}
-      </Badge>
-    )
-  }
-  if (status === 'cancelled') {
-    return <Badge icon={<BanIcon {...ICON} />}>Cancelled</Badge>
-  }
-  if (isLate) {
-    return (
-      <Badge tone="warning" icon={<AlertTriangleIcon {...ICON} />}>
-        Late
+        {goalType === 'save' ? 'goal reached' : 'within limit'}
       </Badge>
     )
   }
   return (
-    <Badge tone="info" icon={<ClockIcon {...ICON} />}>
-      Expected
+    <Badge
+      tone={goalType === 'save' ? 'warning' : 'critical'}
+      icon={<AlertTriangleIcon {...ICON} />}
+    >
+      {goalType === 'save' ? 'behind' : 'over limit'}
     </Badge>
   )
 }

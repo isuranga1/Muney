@@ -3,39 +3,45 @@ import type { UseMutationOptions } from '@tanstack/react-query'
 
 import { http } from '@/lib/api'
 import type {
-  Account,
+  AccountsOverview,
   AppConfig,
   Article,
-  Bank,
-  DashboardSummary,
-  Expense,
-  ExpenseGroup,
+  Bucket,
+  BudgetMonthStatus,
+  Category,
   Feed,
   FeedGroup,
   FeedTestResult,
   FxRate,
   FxSnapshot,
   ImportResult,
-  Income,
-  IncomeSource,
+  MonthReport,
+  ParsedSms,
   RefreshResult,
+  SmsMessage,
+  Transaction,
+  TransactionFilters,
+  YearReport,
 } from '@/types'
 
 export const keys = {
   config: ['config'] as const,
-  dashboard: ['dashboard'] as const,
-  banks: ['banks'] as const,
   accounts: ['accounts'] as const,
-  expenseGroups: ['expense-groups'] as const,
-  expenses: ['expenses'] as const,
-  incomeSources: ['income-sources'] as const,
-  incomes: ['incomes'] as const,
+  categories: ['categories'] as const,
+  transactions: ['transactions'] as const,
+  buckets: ['buckets'] as const,
+  budget: ['budget'] as const,
+  reports: ['reports'] as const,
+  messages: ['messages'] as const,
   fx: ['fx'] as const,
   feedGroups: ['feed-groups'] as const,
   articles: ['articles'] as const,
 }
 
-/** Anything that changes money invalidates the dashboard too. */
+// Derived figures that any money change can move.
+const MONEY_KEYS = [keys.budget, keys.reports] as const
+
+/** Anything that changes money invalidates the summaries too. */
 function useInvalidating<TData, TVars>(
   mutationFn: (vars: TVars) => Promise<TData>,
   invalidate: readonly (readonly string[])[],
@@ -46,7 +52,7 @@ function useInvalidating<TData, TVars>(
     mutationFn,
     ...options,
     onSuccess: (...args) => {
-      for (const key of [...invalidate, keys.dashboard]) {
+      for (const key of [...invalidate, ...MONEY_KEYS]) {
         void queryClient.invalidateQueries({ queryKey: key })
       }
       options?.onSuccess?.(...args)
@@ -64,193 +70,194 @@ export function useConfig() {
   })
 }
 
-export function useDashboard(params: { year?: number; month?: number } = {}) {
+function query(params: object): string {
   const search = new URLSearchParams()
-  if (params.year) search.set('year', String(params.year))
-  if (params.month) search.set('month', String(params.month))
-  const suffix = search.toString() ? `?${search}` : ''
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '' && value !== false) {
+      search.set(key, String(value))
+    }
+  }
+  const text = search.toString()
+  return text ? `?${text}` : ''
+}
+
+type Body = { id?: number } & Record<string, unknown>
+
+/* ---------------------------------------------------------------- accounts */
+
+export function useAccounts() {
   return useQuery({
-    queryKey: [...keys.dashboard, suffix],
-    queryFn: () => http.get<DashboardSummary>(`/dashboard${suffix}`),
+    queryKey: keys.accounts,
+    queryFn: () => http.get<AccountsOverview>('/accounts'),
   })
 }
 
-/* ------------------------------------------------------------------- banks */
-
-export function useBanks() {
-  return useQuery({ queryKey: keys.banks, queryFn: () => http.get<Bank[]>('/banks') })
-}
-
-export function useAccounts() {
-  return useQuery({ queryKey: keys.accounts, queryFn: () => http.get<Account[]>('/accounts') })
-}
-
-export function useCreateBank() {
-  return useInvalidating((body: Record<string, unknown>) => http.post<Bank>('/banks', body), [
-    keys.banks,
-  ])
-}
-
-export function useUpdateBank() {
+export function useSaveAccount() {
   return useInvalidating(
-    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
-      http.patch<Bank>(`/banks/${id}`, body),
-    [keys.banks],
-  )
-}
-
-export function useDeleteBank() {
-  return useInvalidating((id: number) => http.del<void>(`/banks/${id}`), [
-    keys.banks,
-    keys.accounts,
-  ])
-}
-
-export function useCreateAccount() {
-  return useInvalidating((body: Record<string, unknown>) => http.post<Account>('/accounts', body), [
-    keys.banks,
-    keys.accounts,
-  ])
-}
-
-export function useUpdateAccount() {
-  return useInvalidating(
-    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
-      http.patch<Account>(`/accounts/${id}`, body),
-    [keys.banks, keys.accounts],
+    ({ id, ...body }: Body) =>
+      id ? http.patch(`/accounts/${id}`, body) : http.post('/accounts', body),
+    [keys.accounts],
   )
 }
 
 export function useDeleteAccount() {
-  return useInvalidating((id: number) => http.del<void>(`/accounts/${id}`), [
-    keys.banks,
-    keys.accounts,
-  ])
+  return useInvalidating(
+    (id: number) => http.del<void>(`/accounts/${id}`),
+    [keys.accounts, keys.transactions],
+  )
 }
 
-/* ---------------------------------------------------------------- expenses */
+/* -------------------------------------------------------------- categories */
 
-export function useExpenseGroups() {
+export function useCategories() {
   return useQuery({
-    queryKey: keys.expenseGroups,
-    queryFn: () => http.get<ExpenseGroup[]>('/expense-groups'),
+    queryKey: keys.categories,
+    queryFn: () => http.get<Category[]>('/categories'),
   })
 }
 
-export function useUngroupedExpenses() {
+export function useSaveCategory() {
+  return useInvalidating(
+    ({ id, ...body }: Body) =>
+      id
+        ? http.patch<Category>(`/categories/${id}`, body)
+        : http.post<Category>('/categories', body),
+    [keys.categories],
+  )
+}
+
+export function useDeleteCategory() {
+  return useInvalidating(
+    (id: number) => http.del<void>(`/categories/${id}`),
+    [keys.categories, keys.transactions],
+  )
+}
+
+/* ------------------------------------------------------------ transactions */
+
+export function useTransactions(filters: TransactionFilters) {
+  const suffix = query(filters)
   return useQuery({
-    queryKey: [...keys.expenses, 'ungrouped'],
-    queryFn: () => http.get<Expense[]>('/expenses?ungrouped=true'),
+    queryKey: [...keys.transactions, suffix],
+    queryFn: () => http.get<Transaction[]>(`/transactions${suffix}`),
   })
 }
 
-const EXPENSE_KEYS = [keys.expenseGroups, keys.expenses] as const
+// A transaction moves balances, and may create a category (LLM) or a merchant rule.
+const TXN_KEYS = [keys.transactions, keys.accounts, keys.categories] as const
 
-export function useCreateExpenseGroup() {
+export function useSaveTransaction() {
   return useInvalidating(
-    (body: Record<string, unknown>) => http.post<ExpenseGroup>('/expense-groups', body),
-    EXPENSE_KEYS,
+    ({ id, ...body }: Body) =>
+      id
+        ? http.patch<Transaction>(`/transactions/${id}`, body)
+        : http.post<Transaction>('/transactions', body),
+    TXN_KEYS,
   )
 }
 
-export function useUpdateExpenseGroup() {
+export function useDeleteTransaction() {
+  return useInvalidating((id: number) => http.del<void>(`/transactions/${id}`), TXN_KEYS)
+}
+
+/* ------------------------------------------------------------------ budget */
+
+export function useBuckets() {
+  return useQuery({ queryKey: keys.buckets, queryFn: () => http.get<Bucket[]>('/budget/buckets') })
+}
+
+export function useSaveBucket() {
   return useInvalidating(
-    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
-      http.patch<ExpenseGroup>(`/expense-groups/${id}`, body),
-    EXPENSE_KEYS,
+    ({ id, ...body }: Body) =>
+      id
+        ? http.patch<Bucket>(`/budget/buckets/${id}`, body)
+        : http.post<Bucket>('/budget/buckets', body),
+    [keys.buckets],
   )
 }
 
-export function useDeleteExpenseGroup() {
-  return useInvalidating((id: number) => http.del<void>(`/expense-groups/${id}`), EXPENSE_KEYS)
-}
-
-export function useCreateExpense() {
+export function useDeleteBucket() {
   return useInvalidating(
-    (body: Record<string, unknown>) => http.post<Expense>('/expenses', body),
-    EXPENSE_KEYS,
+    (id: number) => http.del<void>(`/budget/buckets/${id}`),
+    [keys.buckets, keys.categories, keys.accounts],
   )
 }
 
-export function useUpdateExpense() {
-  return useInvalidating(
-    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
-      http.patch<Expense>(`/expenses/${id}`, body),
-    EXPENSE_KEYS,
-  )
-}
-
-export function useDeleteExpense() {
-  return useInvalidating((id: number) => http.del<void>(`/expenses/${id}`), EXPENSE_KEYS)
-}
-
-export function useBulkExpenseStatus() {
-  return useInvalidating(
-    (body: { ids: number[]; status: string }) => http.post<Expense[]>('/expenses/bulk-status', body),
-    EXPENSE_KEYS,
-  )
-}
-
-/* ------------------------------------------------------------------ income */
-
-export function useIncomeSources() {
+export function useBudgetMonth(year: number, month: number) {
   return useQuery({
-    queryKey: keys.incomeSources,
-    queryFn: () => http.get<IncomeSource[]>('/income-sources'),
+    queryKey: [...keys.budget, 'month', year, month],
+    queryFn: () => http.get<BudgetMonthStatus>(`/budget/month?year=${year}&month=${month}`),
   })
 }
 
-export function useUngroupedIncomes() {
+export function useBudgetHistory(months = 12) {
   return useQuery({
-    queryKey: [...keys.incomes, 'ungrouped'],
-    queryFn: () => http.get<Income[]>('/incomes?ungrouped=true'),
+    queryKey: [...keys.budget, 'history', months],
+    queryFn: () => http.get<BudgetMonthStatus[]>(`/budget/history?months=${months}`),
   })
 }
 
-const INCOME_KEYS = [keys.incomeSources, keys.incomes] as const
-
-export function useCreateIncomeSource() {
+export function useSetIncomeBasis() {
   return useInvalidating(
-    (body: Record<string, unknown>) => http.post<IncomeSource>('/income-sources', body),
-    INCOME_KEYS,
+    ({ year, month, income_basis }: { year: number; month: number; income_basis: number | null }) =>
+      http.put<BudgetMonthStatus>(`/budget/month/${year}/${month}/basis`, { income_basis }),
+    [],
   )
 }
 
-export function useUpdateIncomeSource() {
+/* ----------------------------------------------------------------- reports */
+
+export function useMonthReport(year: number, month: number) {
+  return useQuery({
+    queryKey: [...keys.reports, 'month', year, month],
+    queryFn: () => http.get<MonthReport>(`/reports/month?year=${year}&month=${month}`),
+  })
+}
+
+export function useYearReport(year: number) {
+  return useQuery({
+    queryKey: [...keys.reports, 'year', year],
+    queryFn: () => http.get<YearReport>(`/reports/year?year=${year}`),
+  })
+}
+
+/* ------------------------------------------------------------------- inbox */
+
+const MESSAGE_KEYS = [keys.messages, ...TXN_KEYS] as const
+
+export function useMessages() {
+  return useQuery({
+    queryKey: keys.messages,
+    queryFn: () => http.get<SmsMessage[]>('/messages'),
+    // SMS arrive from the phone on their own, and `queued` ones flip to
+    // processed a few seconds later once the LLM has read them.
+    refetchInterval: 30_000,
+  })
+}
+
+export function useRecordMessage() {
   return useInvalidating(
-    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
-      http.patch<IncomeSource>(`/income-sources/${id}`, body),
-    INCOME_KEYS,
+    ({ id, ...body }: { id: number } & ParsedSms) =>
+      http.post<SmsMessage>(`/messages/${id}/record`, body),
+    MESSAGE_KEYS,
   )
 }
 
-export function useDeleteIncomeSource() {
-  return useInvalidating((id: number) => http.del<void>(`/income-sources/${id}`), INCOME_KEYS)
-}
-
-export function useCreateIncome() {
+export function useIgnoreMessage() {
   return useInvalidating(
-    (body: Record<string, unknown>) => http.post<Income>('/incomes', body),
-    INCOME_KEYS,
+    (id: number) => http.post<SmsMessage>(`/messages/${id}/ignore`),
+    [keys.messages],
   )
 }
 
-export function useUpdateIncome() {
-  return useInvalidating(
-    ({ id, ...body }: { id: number } & Record<string, unknown>) =>
-      http.patch<Income>(`/incomes/${id}`, body),
-    INCOME_KEYS,
-  )
+export function useDeleteMessage() {
+  return useInvalidating((id: number) => http.del<void>(`/messages/${id}`), [keys.messages])
 }
 
-export function useDeleteIncome() {
-  return useInvalidating((id: number) => http.del<void>(`/incomes/${id}`), INCOME_KEYS)
-}
-
-export function useBulkIncomeStatus() {
+export function useReprocessMessages() {
   return useInvalidating(
-    (body: { ids: number[]; status: string }) => http.post<Income[]>('/incomes/bulk-status', body),
-    INCOME_KEYS,
+    () => http.post<{ checked: number; processed: number }>('/messages/reprocess'),
+    MESSAGE_KEYS,
   )
 }
 
@@ -372,7 +379,7 @@ export function useMarkAllRead() {
 
 /* ---------------------------------------------------------------------- fx */
 
-const FX_KEYS = [keys.fx, keys.banks, keys.accounts, keys.expenseGroups, keys.incomeSources] as const
+const FX_KEYS = [keys.fx, keys.accounts] as const
 
 export function useFx() {
   return useQuery({ queryKey: keys.fx, queryFn: () => http.get<FxSnapshot>('/fx') })

@@ -78,6 +78,13 @@ export const IncomeIcon = (p: IconProps) => (
   </Svg>
 )
 
+export const InboxIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+  </Svg>
+)
+
 export const SettingsIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-9M8 20H3" />
@@ -246,6 +253,47 @@ export const MailOpenIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3 9.5 12 4l9 5.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
     <path d="m3 9.5 9 6 9-6" />
+  </Svg>
+)
+
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m15 18-6-6 6-6" />
+  </Svg>
+)
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m9 18 6-6-6-6" />
+  </Svg>
+)
+
+export const TargetIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1" />
+  </Svg>
+)
+
+export const ListIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 6h13M8 12h13M8 18h13" />
+    <path d="M3 6h.01M3 12h.01M3 18h.01" />
+  </Svg>
+)
+
+export const TransferIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 7h13l-4-4" />
+    <path d="M17 17H4l4 4" />
+  </Svg>
+)
+
+export const SparklesIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8Z" />
+    <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" />
   </Svg>
 )
 

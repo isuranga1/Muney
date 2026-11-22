@@ -1,20 +1,22 @@
-from app.models.bank import Account, Bank
+from app.models.account import Account
 from app.models.base import Base
-from app.models.expense import Expense, ExpenseGroup
+from app.models.budget import BudgetBucket, BudgetMonth
+from app.models.category import Category, MerchantRule
 from app.models.fx import FxRate
-from app.models.income import Income, IncomeSource
 from app.models.news import Article, Feed, FeedGroup
+from app.models.transaction import Transaction, TransactionMessage
 from app.models.user import User
 
 __all__ = [
     "Base",
     "User",
-    "Bank",
     "Account",
-    "ExpenseGroup",
-    "Expense",
-    "IncomeSource",
-    "Income",
+    "BudgetBucket",
+    "BudgetMonth",
+    "Category",
+    "MerchantRule",
+    "Transaction",
+    "TransactionMessage",
     "FxRate",
     "FeedGroup",
     "Feed",

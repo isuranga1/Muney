@@ -1,8 +1,8 @@
 # Muney
 
-A personal finance board. Configurable banks and accounts, grouped expenses you can
-tick off as paid, and recorded income — all converted to **LKR** automatically, so a
-USD savings account and an SGD wallet roll into one net-worth figure.
+A personal money tracker. Your bank accounts in their own currencies, every
+transaction sorted into categories and months, a percentage rule for each
+month's income, and bank SMS forwarded from your iPhone recorded for you.
 
 - **Frontend** — Vite + React 19 + TypeScript + Tailwind CSS v4
 - **Backend** — FastAPI + SQLAlchemy 2.0
@@ -18,39 +18,44 @@ Muney/
 │   │   ├── core/       config + security
 │   │   ├── models/     SQLAlchemy tables
 │   │   ├── schemas/    Pydantic request/response models
-│   │   └── services/   FX rates, conversion
+│   │   └── services/   ledger, FX, reports, SMS ingest, LLM, categoriser
 │   └── scripts/        one-off helpers
 └── frontend/           Vite app
     └── src/
         ├── components/ layout, UI primitives, charts
         ├── lib/        API client, auth, query hooks, formatting
-        └── pages/      Dashboard, Banks, Expenses, Income, Settings
+        └── pages/      Home, Accounts, Activity, Budget, Inbox, News, Settings
 ```
 
 ## What it does
 
-**Banks & accounts** — add and remove banks, and under each bank add accounts with a
-type (savings, current, fixed deposit, credit card, investment, wallet, loan), a
-currency, a balance, and an account number. Accounts flagged as *liability* count
-against net worth instead of toward it.
+**Accounts** — savings, current, credit cards, cash and wallets, each in its own
+currency. A USD account shows its USD balance with the LKR (and USD, for LKR
+accounts) value beside it; net worth is shown in both. Every transaction moves
+its account's balance, and editing or deleting one puts the balance back.
 
-**Automatic LKR conversion** — every account, expense and income shows its own
-currency *and* its LKR value. Rates come from a free public provider
-(fawazahmed0/currency-api — no key, no rate limit, ~340 currencies), are cached in
-Postgres, and refresh on demand or when they go stale. A second host is tried if the
-first is unreachable. Any rate you set by hand wins and survives every refresh. If a
-currency has no rate, the app says so rather than quietly leaving it out of a total.
+**Activity** — expenses, income and transfers between your own accounts,
+grouped by day. Switch to the yearly view for month-by-month income vs spending
+and a category × month table. Amounts are frozen in LKR at the rate of the day,
+so past months don't shift when rates move.
 
-**Expenses** — create groups ("Monthly bills", "Trip to Japan"), add expenses under
-them, and click an expense to strike it out as paid. Each row carries an amount,
-currency, due date, paid date, status, recurrence, vendor and the account it was paid
-from. Select several rows to mark them paid in one go. Overdue items are flagged.
+**Categories** — keywords file transactions instantly; recategorising one
+teaches a rule for that merchant; anything left goes to the on-board LLM, which
+picks an existing category or proposes a new one (flagged for you to review).
 
-**Income** — the same shape, one level up: sources (salary, a client, dividends) with
-entries that are *expected* or *received*.
+**Budget rule** — split income by percentage, e.g. 20% emergency fund, 50% daily
+expenses, 20% investment, 10% carefree. Saving buckets are met by reaching the
+target, spending buckets by staying under it. Map each category (and optionally
+a savings account) to a bucket, and see each month — and the last 12 — on or off
+track. Fully editable.
 
-**Dashboard** — net worth, assets, liabilities, this month's net, balances by bank,
-expenses paid vs outstanding by group, and holdings by currency.
+**SMS inbox** — an iPhone Shortcut forwards bank SMS over Tailscale. Regex
+parsers (HNB built in) read known formats instantly; anything else goes to a
+small LLM running on the Pi itself (llama.cpp + Qwen2.5-1.5B, offline). A debit
+and a matching credit between your own accounts become one transfer. Anything
+unreadable waits for you. Setup: [DEPLOYMENT.md §9](DEPLOYMENT.md).
+
+**News** — RSS feeds, unchanged.
 
 ---
 
@@ -116,8 +121,9 @@ The sign-in screen offers to **create an account** while the users table is empt
 Once that account exists, registration closes itself — set
 `ALLOW_BOOTSTRAP_REGISTRATION=false` in `.env` if you want it locked permanently.
 
-Then: add a bank → add accounts → create an expense group → add expenses. Hit
-**Refresh rates** on the Rates & settings page to pull live FX.
+Then: add your accounts (with their last digits) → check the budget rule →
+add a transaction with the + button. Hit **Refresh rates** in Settings to pull
+live FX.
 
 ---
 

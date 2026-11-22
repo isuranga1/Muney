@@ -2,8 +2,8 @@ import { createRoot } from 'react-dom/client'
 
 import * as Icons from '@/components/icons'
 import {
-  ExpenseStatusBadge,
-  IncomeStatusBadge,
+  GoalBadge,
+  LlmBadge,
   InactiveBadge,
   LiabilityBadge,
   ManualRateBadge,
@@ -29,13 +29,9 @@ createRoot(document.getElementById('root')!).render(
 
       <h2 className="mt-10 mb-4 text-base font-semibold">Status badges</h2>
       <div className="flex flex-wrap gap-2">
-        <ExpenseStatusBadge status="paid" paidDate="2026-07-14" isOverdue={false} />
-        <ExpenseStatusBadge status="pending" paidDate={null} isOverdue={false} />
-        <ExpenseStatusBadge status="pending" paidDate={null} isOverdue />
-        <ExpenseStatusBadge status="cancelled" paidDate={null} isOverdue={false} />
-        <IncomeStatusBadge status="received" receivedDate="2026-07-01" isLate={false} />
-        <IncomeStatusBadge status="expected" receivedDate={null} isLate={false} />
-        <IncomeStatusBadge status="expected" receivedDate={null} isLate />
+        <GoalBadge onTrack goalType="save" />
+        <GoalBadge onTrack={false} goalType="spend" />
+        <LlmBadge />
         <NoRateBadge />
         <StaleRatesBadge />
         <ManualRateBadge />
