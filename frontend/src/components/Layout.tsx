@@ -14,6 +14,7 @@ import {
   ListIcon,
   LogOutIcon,
   MoonIcon,
+  PiggyBankIcon,
   RssIcon,
   SettingsIcon,
   SunIcon,
@@ -23,15 +24,17 @@ import {
 
 // Add a page: one entry here plus a <Route> in App.tsx.
 // `short` is what the phone tab bar shows — seven tabs on a 390px screen leaves
-// roughly 55px each, so the long labels do not fit.
+// roughly 55px each, so the long labels do not fit. `phone: false` keeps a page
+// off the tab bar; Settings is reached from the gear in the phone's top bar.
 const NAV = [
   { to: '/', label: 'Overview', short: 'Home', Icon: DashboardIcon },
   { to: '/accounts', label: 'Accounts', short: 'Accounts', Icon: BankIcon },
   { to: '/activity', label: 'Activity', short: 'Activity', Icon: ListIcon },
   { to: '/budget', label: 'Budget rule', short: 'Budget', Icon: TargetIcon },
+  { to: '/funds', label: 'Funds', short: 'Funds', Icon: PiggyBankIcon },
   { to: '/inbox', label: 'SMS inbox', short: 'Inbox', Icon: InboxIcon },
   { to: '/news', label: 'News', short: 'News', Icon: RssIcon },
-  { to: '/settings', label: 'Settings', short: 'Settings', Icon: SettingsIcon },
+  { to: '/settings', label: 'Settings', short: 'Settings', Icon: SettingsIcon, phone: false },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -51,6 +54,18 @@ export default function Layout({ children }: { children: ReactNode }) {
           Muney
         </span>
         <div className="flex items-center gap-1">
+          <NavLink
+            to="/settings"
+            aria-label="Settings"
+            className={({ isActive }) =>
+              cx(
+                'grid size-11 place-items-center rounded-full active:bg-black/10 dark:active:bg-white/10',
+                isActive ? 'text-series-1' : 'text-ink-2',
+              )
+            }
+          >
+            <SettingsIcon size={18} />
+          </NavLink>
           <button
             type="button"
             onClick={toggle}
@@ -160,7 +175,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         className="glass-chrome pad-safe-bottom fixed inset-x-0 bottom-0 z-40 border-t pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden"
       >
         <ul className="flex">
-          {NAV.map(({ to, short, Icon }) => (
+          {NAV.filter((item) => item.phone !== false).map(({ to, short, Icon }) => (
             <li key={to} className="flex-1">
               <NavLink
                 to={to}

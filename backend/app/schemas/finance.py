@@ -223,6 +223,36 @@ class BucketRead(ORMModel):
     sort_order: int
 
 
+class FundEntryRead(ORMModel):
+    id: int
+    bucket_id: int
+    kind: str
+    year: int
+    month: int
+    entry_date: date
+    amount: Money
+    currency: str
+    base_amount: Money | None
+    note: str | None
+
+
+class AllocationSet(BaseModel):
+    """Tick a saving bucket's month: "I've set this much aside"."""
+
+    amount: Money = Field(gt=0)
+    currency: CurrencyCode
+    note: str | None = Field(default=None, max_length=200)
+
+
+class FundAdjust(BaseModel):
+    """An opening balance or top-up (positive), or money taken out (negative)."""
+
+    amount: Money
+    currency: CurrencyCode
+    entry_date: date | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+
 class BucketStatus(BaseModel):
     bucket_id: int
     name: str
@@ -237,6 +267,8 @@ class BucketStatus(BaseModel):
     on_track: bool | None
     # Share of the month's income actually used, for "planned 20% vs did 14%".
     actual_percent: float | None
+    # Save buckets: the month's ticked allocation, if any (already in `actual`).
+    allocation: FundEntryRead | None = None
 
 
 class BudgetMonthStatus(BaseModel):
@@ -251,11 +283,67 @@ class BudgetMonthStatus(BaseModel):
     # Expenses whose category has no bucket — the gap in the rule.
     unassigned_spend: Money
     on_track_count: int
+    # Today's rates (units of base per 1 unit), to show targets in other currencies.
+    secondary_currency: str | None = None
+    rates: dict[str, float] = {}
 
 
 class BudgetBasisSet(BaseModel):
     # None clears the override and goes back to actual income.
     income_basis: Money | None = Field(default=None, ge=0)
+
+
+class FundHolding(BaseModel):
+    currency: str
+    amount: Money
+    # At today's rate; None when no rate is known.
+    base_value: Money | None
+
+
+class FundStatus(BaseModel):
+    bucket_id: int
+    name: str
+    color: str | None
+    goal_type: str
+    percent: Money
+    # save: what's set aside, at today's rates. spend: budget not yet spent.
+    balance: Money
+    holdings: list[FundHolding]
+    # In base currency at the time. save: allocations, transfers, top-ups.
+    # spend: each month's budget plus top-ups.
+    put_in: Money
+    # save: withdrawals. spend: spending plus withdrawals.
+    taken_out: Money
+    # Sum of every month's target so far.
+    goal_to_date: Money
+    # Of the months that had a target, how many met it.
+    months_met: int
+    months_counted: int
+    this_month_target: Money
+    this_month_actual: Money
+    # Save buckets: has this month been ticked?
+    allocated_this_month: bool | None
+
+
+class CurrencyEarmark(BaseModel):
+    """Per currency: how much of what's in your accounts is promised to a fund."""
+
+    currency: str
+    in_accounts: Money
+    set_aside: Money
+    free: Money
+
+
+class FundsOverview(BaseModel):
+    base_currency: str
+    secondary_currency: str | None
+    secondary_rate: float | None
+    # First month counted.
+    since_year: int
+    since_month: int
+    funds: list[FundStatus]
+    total: Money
+    earmarks: list[CurrencyEarmark]
 
 
 # ------------------------------------------------------------------- reports

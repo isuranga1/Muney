@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Panel } from '@/components/charts'
 import { GoalBadge } from '@/components/badges'
 import { MonthNav, ProgressBar, useMonthState } from '@/components/finance'
-import { AlertTriangleIcon, CheckIcon, PlusIcon } from '@/components/icons'
+import { AlertTriangleIcon, CheckIcon, PiggyBankIcon, PlusIcon } from '@/components/icons'
 import {
   Button,
   Card,
@@ -22,12 +22,15 @@ import {
   useBudgetMonth,
   useBuckets,
   useCategories,
+  useClearAllocation,
+  useConfig,
   useDeleteBucket,
   useSaveBucket,
   useSaveCategory,
+  useSetAllocation,
   useSetIncomeBasis,
 } from '@/lib/queries'
-import type { Bucket } from '@/types'
+import type { Bucket, BucketStatus, BudgetMonthStatus } from '@/types'
 
 export default function Budget() {
   const { year, month, set } = useMonthState()
@@ -38,6 +41,15 @@ export default function Budget() {
       <SectionHeader
         title="Budget rule"
         subtitle="Split every month's income by percentage, then see whether you stuck to it."
+        actions={
+          <Link
+            to="/funds"
+            className="inline-flex items-center gap-1.5 text-sm text-series-1 underline-offset-2 hover:underline"
+          >
+            <PiggyBankIcon size={15} />
+            Fund balances
+          </Link>
+        }
       />
       <MonthNav year={year} month={month} onChange={set} />
       <ErrorNote error={status.error} />
@@ -159,6 +171,16 @@ function MonthStatus({ year, month }: { year: number; month: number }) {
                     ? `${money(remaining, base)} left`
                     : `${money(-remaining, base)} over`}
               </p>
+              {b.goal_type === 'save' && (
+                <Allocation
+                  // Remount when the goal moves, so the suggested amount follows it.
+                  key={`${year}-${month}-${b.target}-${b.allocation?.id ?? 'none'}`}
+                  year={year}
+                  month={month}
+                  bucket={b}
+                  status={s}
+                />
+              )}
             </Card>
           )
         })}
@@ -178,6 +200,129 @@ function MonthStatus({ year, month }: { year: number; month: number }) {
         </Card>
       )}
     </>
+  )
+}
+
+/* ---------------------------------------------------------- allocation */
+
+/** The goal in another currency at today's rate: LKR 60,000 -> USD 200.00. */
+function inCurrency(baseAmount: number, currency: string, rates: Record<string, number>) {
+  const rate = rates[currency]
+  return rate ? Math.round((baseAmount / rate) * 100) / 100 : null
+}
+
+/**
+ * Tick a saving bucket for the month. The money usually stays in the account
+ * the salary landed in, so this records the promise, in the currency it's held.
+ */
+function Allocation({
+  year,
+  month,
+  bucket,
+  status,
+}: {
+  year: number
+  month: number
+  bucket: BucketStatus
+  status: BudgetMonthStatus
+}) {
+  const config = useConfig()
+  const setAllocation = useSetAllocation()
+  const clear = useClearAllocation()
+  const base = status.base_currency
+  const done = bucket.allocation
+  const currencies = config.data?.supported_currencies ?? [base]
+  const startCurrency = done?.currency ?? status.secondary_currency ?? base
+  const suggest = (code: string) => {
+    const value = inCurrency(bucket.target, code, status.rates)
+    return value ? String(value) : ''
+  }
+
+  const [editing, setEditing] = useState(false)
+  const [currency, setCurrency] = useState(startCurrency)
+  const [amount, setAmount] = useState(done ? String(done.amount) : suggest(startCurrency))
+  const goalSecondary = status.secondary_currency
+    ? inCurrency(bucket.target, status.secondary_currency, status.rates)
+    : null
+  const vars = { bucketId: bucket.bucket_id, year, month }
+
+  return (
+    <div className="mt-3 border-t border-hairline pt-3">
+      <p className="mb-2 text-xs text-muted">
+        Goal {money(bucket.target, base)}
+        {goalSecondary !== null && ` ≈ ${money(goalSecondary, status.secondary_currency!)}`}
+      </p>
+      <ErrorNote error={setAllocation.error ?? clear.error} />
+      {done && !editing ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-good-text">
+            <CheckIcon size={15} strokeWidth={2.25} />
+            Set aside {money(done.amount, done.currency)}
+            {done.currency !== base && done.base_amount !== null && (
+              <span className="font-normal text-muted">≈ {money(done.base_amount, base)}</span>
+            )}
+          </span>
+          <span className="flex gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+              Change
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={clear.isPending}
+              onClick={() => clear.mutate(vars)}
+            >
+              Undo
+            </Button>
+          </span>
+        </div>
+      ) : (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setAllocation.mutate(
+              { ...vars, amount: Number(amount), currency },
+              { onSuccess: () => setEditing(false) },
+            )
+          }}
+        >
+          <Input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0.01"
+            required
+            aria-label={`Amount for ${bucket.name}`}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-32 flex-1 py-2"
+          />
+          <Select
+            aria-label="Currency"
+            value={currency}
+            onChange={(e) => {
+              setCurrency(e.target.value)
+              setAmount(suggest(e.target.value))
+            }}
+            className="w-24 py-2"
+          >
+            {currencies.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </Select>
+          {editing && (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" size="sm" variant="primary" disabled={setAllocation.isPending}>
+            <PiggyBankIcon size={14} />
+            {editing ? 'Save' : 'Set aside'}
+          </Button>
+        </form>
+      )}
+    </div>
   )
 }
 

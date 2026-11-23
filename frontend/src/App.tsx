@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import Accounts from '@/pages/Accounts'
 import Activity from '@/pages/Activity'
 import Budget from '@/pages/Budget'
+import Funds from '@/pages/Funds'
 import Home from '@/pages/Home'
 import Inbox from '@/pages/Inbox'
 import Login from '@/pages/Login'
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/budget" element={<Budget />} />
+        <Route path="/funds" element={<Funds />} />
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/news" element={<News />} />
         <Route path="/settings" element={<Settings />} />

@@ -11,6 +11,8 @@ import type {
   Category,
   Feed,
   FeedGroup,
+  FundEntry,
+  FundsOverview,
   FeedTestResult,
   FxRate,
   FxSnapshot,
@@ -203,6 +205,55 @@ export function useSetIncomeBasis() {
       http.put<BudgetMonthStatus>(`/budget/month/${year}/${month}/basis`, { income_basis }),
     [],
   )
+}
+
+/* ------------------------------------------------------------------- funds */
+
+type AllocationVars = { bucketId: number; year: number; month: number }
+
+/** Tick a saving bucket's month: this much is set aside. */
+export function useSetAllocation() {
+  return useInvalidating(
+    ({ bucketId, year, month, ...body }: AllocationVars & { amount: number; currency: string }) =>
+      http.put<BudgetMonthStatus>(`/budget/allocations/${bucketId}/${year}/${month}`, body),
+    [],
+  )
+}
+
+export function useClearAllocation() {
+  return useInvalidating(
+    ({ bucketId, year, month }: AllocationVars) =>
+      http.del<BudgetMonthStatus>(`/budget/allocations/${bucketId}/${year}/${month}`),
+    [],
+  )
+}
+
+export function useFunds() {
+  return useQuery({
+    queryKey: [...keys.budget, 'funds'],
+    queryFn: () => http.get<FundsOverview>('/budget/funds'),
+  })
+}
+
+export function useFundEntries(bucketId: number | null) {
+  return useQuery({
+    queryKey: [...keys.budget, 'fund-entries', bucketId],
+    queryFn: () => http.get<FundEntry[]>(`/budget/funds/${bucketId}/entries`),
+    enabled: bucketId !== null,
+  })
+}
+
+/** A top-up or opening balance (positive), or money taken out (negative). */
+export function useAddFundEntry() {
+  return useInvalidating(
+    ({ bucketId, ...body }: Body & { bucketId: number }) =>
+      http.post<FundEntry>(`/budget/funds/${bucketId}/entries`, body),
+    [],
+  )
+}
+
+export function useDeleteFundEntry() {
+  return useInvalidating((id: number) => http.del<void>(`/budget/funds/entries/${id}`), [])
 }
 
 /* ----------------------------------------------------------------- reports */

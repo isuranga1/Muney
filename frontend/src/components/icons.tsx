@@ -290,6 +290,14 @@ export const TransferIcon = (p: IconProps) => (
   </Svg>
 )
 
+export const PiggyBankIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M19 9.5c1 .5 2 1.6 2 3v1h-2.2a7 7 0 0 1-2.3 2.8V19h-2.5v-1.6a8 8 0 0 1-3.5 0V19H8v-2.7A6.5 6.5 0 0 1 4 11c0-3.3 3.1-6 7-6h1.5c1.4 0 2.8.4 3.9 1.1L19 5Z" />
+    <path d="M15.5 10.5h.01" />
+    <path d="M2 9.5c0 1 .8 1.8 2 2" />
+  </Svg>
+)
+
 export const SparklesIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8Z" />

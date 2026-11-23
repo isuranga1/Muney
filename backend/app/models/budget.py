@@ -1,6 +1,7 @@
+from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -42,3 +43,37 @@ class BudgetMonth(TimestampMixin, Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     income_basis: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+
+
+class FundEntry(TimestampMixin, Base):
+    """Money set aside for a bucket while it stays where it is.
+
+    A salary lands in a USD account and mostly stays there; "this month's 20%
+    to the emergency fund" is then a promise, not a transfer. An entry records
+    that promise in the currency it's held in, with its base-currency value
+    frozen on the day, like a transaction's.
+
+    kind:
+        monthly — the month's ticked allocation; one per bucket and month, and
+                  it counts toward that month's goal
+        adjust  — anything else: an opening balance, an extra top-up, or a
+                  negative amount when you spend from the fund. Changes the
+                  fund's balance, never a month's goal check.
+    """
+
+    __tablename__ = "fund_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    bucket_id: Mapped[int] = mapped_column(
+        ForeignKey("budget_buckets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(8), nullable=False, default="adjust")
+    # The month it belongs to; for `adjust`, the month of entry_date.
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Signed: only `adjust` entries go negative.
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    base_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    note: Mapped[str | None] = mapped_column(String(200))

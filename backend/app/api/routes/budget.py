@@ -1,19 +1,25 @@
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
-from app.models import BudgetBucket, BudgetMonth
+from app.models import BudgetBucket, BudgetMonth, FundEntry
 from app.schemas.finance import (
+    AllocationSet,
     BucketCreate,
     BucketRead,
     BucketUpdate,
     BudgetBasisSet,
     BudgetMonthStatus,
+    FundAdjust,
+    FundEntryRead,
+    FundsOverview,
 )
 from app.services import reports
+from app.services.fx import convert, get_rate_map
 
 router = APIRouter(prefix="/budget", tags=["budget"])
 
@@ -109,3 +115,130 @@ def history(
         out.append(reports.budget_status(db, year, month))
         year, month = reports.previous_month(year, month)
     return out
+
+
+# -------------------------------------------------------------------- funds
+
+
+def _base_value(db: DbSession, amount: Decimal, currency: str) -> Decimal:
+    """Frozen at today's rate, like a transaction's base_amount."""
+    value = convert(amount, currency, get_rate_map(db))
+    if value is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No exchange rate for {currency} yet — refresh rates or set one in Settings",
+        )
+    return value
+
+
+def _month_date(year: int, month: int) -> date:
+    """Today if it's that month; otherwise the month's last (or first) day."""
+    start, end = reports.month_bounds(year, month)
+    return min(max(date.today(), start), end)
+
+
+@router.put("/allocations/{bucket_id}/{year}/{month}", response_model=BudgetMonthStatus)
+def set_allocation(
+    bucket_id: int,
+    year: int,
+    month: int,
+    payload: AllocationSet,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> BudgetMonthStatus:
+    """Tick a saving bucket for the month: this much is set aside, wherever it sits."""
+    if not 1 <= month <= 12:
+        raise HTTPException(status_code=422, detail="month must be 1-12")
+    if _get(db, bucket_id).goal_type != "save":
+        raise HTTPException(status_code=422, detail="Only saving buckets take allocations")
+    entry = db.scalar(
+        select(FundEntry).where(
+            FundEntry.bucket_id == bucket_id,
+            FundEntry.kind == "monthly",
+            FundEntry.year == year,
+            FundEntry.month == month,
+        )
+    )
+    if entry is None:
+        entry = FundEntry(bucket_id=bucket_id, kind="monthly", year=year, month=month)
+        db.add(entry)
+    entry.entry_date = _month_date(year, month)
+    entry.amount = payload.amount
+    entry.currency = payload.currency
+    entry.base_amount = _base_value(db, payload.amount, payload.currency)
+    entry.note = payload.note
+    db.commit()
+    return reports.budget_status(db, year, month)
+
+
+@router.delete("/allocations/{bucket_id}/{year}/{month}", response_model=BudgetMonthStatus)
+def clear_allocation(
+    bucket_id: int, year: int, month: int, db: DbSession, current_user: CurrentUser
+) -> BudgetMonthStatus:
+    entry = db.scalar(
+        select(FundEntry).where(
+            FundEntry.bucket_id == bucket_id,
+            FundEntry.kind == "monthly",
+            FundEntry.year == year,
+            FundEntry.month == month,
+        )
+    )
+    if entry is not None:
+        db.delete(entry)
+        db.commit()
+    return reports.budget_status(db, year, month)
+
+
+@router.get("/funds", response_model=FundsOverview)
+def funds(db: DbSession, current_user: CurrentUser) -> FundsOverview:
+    return reports.fund_overview(db)
+
+
+@router.get("/funds/{bucket_id}/entries", response_model=list[FundEntryRead])
+def fund_entries(bucket_id: int, db: DbSession, current_user: CurrentUser) -> list[FundEntry]:
+    _get(db, bucket_id)
+    return list(
+        db.scalars(
+            select(FundEntry)
+            .where(FundEntry.bucket_id == bucket_id)
+            .order_by(FundEntry.entry_date.desc(), FundEntry.id.desc())
+        ).all()
+    )
+
+
+@router.post(
+    "/funds/{bucket_id}/entries", response_model=FundEntryRead, status_code=status.HTTP_201_CREATED
+)
+def add_fund_entry(
+    bucket_id: int, payload: FundAdjust, db: DbSession, current_user: CurrentUser
+) -> FundEntry:
+    """An opening balance or top-up, or (negative) money taken out of the fund."""
+    _get(db, bucket_id)
+    if payload.amount == 0:
+        raise HTTPException(status_code=422, detail="Amount can't be zero")
+    when = payload.entry_date or date.today()
+    entry = FundEntry(
+        bucket_id=bucket_id,
+        kind="adjust",
+        year=when.year,
+        month=when.month,
+        entry_date=when,
+        amount=payload.amount,
+        currency=payload.currency,
+        base_amount=_base_value(db, payload.amount, payload.currency),
+        note=payload.note,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.delete("/funds/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_fund_entry(entry_id: int, db: DbSession, current_user: CurrentUser) -> Response:
+    entry = db.get(FundEntry, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+    db.delete(entry)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

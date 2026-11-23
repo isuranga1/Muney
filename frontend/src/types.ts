@@ -142,6 +142,8 @@ export interface BucketStatus {
   progress: number
   on_track: boolean | null
   actual_percent: number | null
+  /** Saving buckets: the month's ticked allocation, already counted in `actual`. */
+  allocation: FundEntry | null
 }
 
 export interface BudgetMonthStatus {
@@ -155,6 +157,66 @@ export interface BudgetMonthStatus {
   buckets: BucketStatus[]
   unassigned_spend: number
   on_track_count: number
+  secondary_currency: string | null
+  /** Units of base currency per 1 unit, at today's rates. */
+  rates: Record<string, number>
+}
+
+/* ------------------------------------------------------------------- funds */
+
+export interface FundEntry {
+  id: number
+  bucket_id: number
+  kind: 'monthly' | 'adjust'
+  year: number
+  month: number
+  entry_date: string
+  amount: number
+  currency: string
+  base_amount: number | null
+  note: string | null
+}
+
+export interface FundHolding {
+  currency: string
+  amount: number
+  base_value: number | null
+}
+
+export interface FundStatus {
+  bucket_id: number
+  name: string
+  color: string | null
+  goal_type: 'save' | 'spend'
+  percent: number
+  balance: number
+  holdings: FundHolding[]
+  put_in: number
+  taken_out: number
+  goal_to_date: number
+  months_met: number
+  months_counted: number
+  this_month_target: number
+  this_month_actual: number
+  allocated_this_month: boolean | null
+}
+
+export interface CurrencyEarmark {
+  currency: string
+  in_accounts: number
+  set_aside: number
+  free: number
+}
+
+export interface FundsOverview {
+  base_currency: string
+  secondary_currency: string | null
+  secondary_rate: number | null
+  since_year: number
+  since_month: number
+  funds: FundStatus[]
+  total: number
+  earmarks: CurrencyEarmark[]
 }
 
 /* ----------------------------------------------------------------- reports */

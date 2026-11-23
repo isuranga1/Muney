@@ -24,7 +24,7 @@ Muney/
     └── src/
         ├── components/ layout, UI primitives, charts
         ├── lib/        API client, auth, query hooks, formatting
-        └── pages/      Home, Accounts, Activity, Budget, Inbox, News, Settings
+        └── pages/      Home, Accounts, Activity, Budget, Funds, Inbox, News, Settings
 ```
 
 ## What it does
@@ -47,7 +47,15 @@ picks an existing category or proposes a new one (flagged for you to review).
 expenses, 20% investment, 10% carefree. Saving buckets are met by reaching the
 target, spending buckets by staying under it. Map each category (and optionally
 a savings account) to a bucket, and see each month — and the last 12 — on or off
-track. Fully editable.
+track. Fully editable. Money for a saving bucket doesn't have to move: tick the
+month off with the amount you're setting aside, in the currency it sits in
+(e.g. USD in the account the salary lands in).
+
+**Funds** — each bucket's running balance so far. Saving funds show what's set
+aside, valued at today's rates. Spending buckets show budget not yet spent,
+carried over month to month. Also shows, per currency, how much of your account
+balances is promised to a fund and how much is free. Add an opening balance, or
+take money out when you use a fund.
 
 **SMS inbox** — an iPhone Shortcut forwards bank SMS over Tailscale. Regex
 parsers (HNB built in) read known formats instantly; anything else goes to a
