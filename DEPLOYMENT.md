@@ -354,23 +354,35 @@ It appears in the inbox as "recorded" within a second (a parser read it).
 
 ### iPhone
 
-1. **Tailscale**: sign in to the same tailnet and turn on
-   **Settings → VPN → Tailscale → Connect On Demand**, so the tunnel is up
-   whenever the automation runs.
+The automation switches Tailscale on only while it forwards a message.
+
+1. **Tailscale**: sign in to the same tailnet, then turn **Connect On
+   Demand** off and disconnect.
 2. **Shortcuts → Automation → + → Message**:
-   - *Sender*: your bank's SMS name (e.g. `HNB`). Make one automation per bank.
-   - *Message contains*: leave empty. The backend skips non-transactions
-     itself.
-   - **Run Immediately** (turn off "Notify When Run" if you like).
-3. Add the action **Get Contents of URL**:
-   - URL: `http://<pi-magicdns-name>:8080/api/ingest/sms`
-   - Method: `POST`
-   - Headers: `X-Ingest-Token` = your token
-   - Request Body: **JSON**
-     - `message` (Text) = *Shortcut Input → Content*
-     - `sender` (Text) = *Shortcut Input → Sender*
-     - `received_at` (Text) = *Current Date*, formatted as **ISO 8601**
-4. Send yourself a test, or wait for a real transaction, and check the inbox.
+   - *Sender*: `HNB`, or, if it isn't in the picker, *Message Contains*
+     `2462462` (part of HNB's hotline number, present in every HNB alert).
+     Make one automation per bank.
+   - **Run Immediately**, with "Notify When Run" off.
+3. Actions, in order:
+   1. **Tailscale → Connect** (or *Set VPN → Connect* with the Tailscale
+      profile).
+   2. **Wait** 3 seconds.
+   3. **Get Contents of URL**:
+      - URL: `http://<pi-magicdns-name>:8080/api/ingest/sms`
+      - Method: `POST`
+      - Headers: `X-Ingest-Token` = your token
+      - Request Body: **JSON**
+        - `message` (Text) = *Shortcut Input → Content*
+        - `sender` (Text) = *Shortcut Input → Sender*
+        - `received_at` (Text) = *Current Date*, formatted as **ISO 8601**
+          with time
+   4. **Tailscale → Disconnect**.
+4. Test with an ordinary shortcut: a **Text** action holding a real SMS,
+   the same four actions with `message` set to that Text, then **Show
+   Result**. It should appear in the inbox within seconds.
+
+If the request fails, the shortcut stops before step 4 and Tailscale stays
+connected. Switch it off by hand and add that transaction manually.
 
 The same SMS forwarded twice within `INGEST_DEDUPE_MINUTES` (default 10) is
 only stored once.
