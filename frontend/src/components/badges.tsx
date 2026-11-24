@@ -66,21 +66,15 @@ export function LlmBadge({ label = 'AI' }: { label?: string }) {
 }
 
 /** Budget bucket state for the month. `null` = no income to measure against yet. */
-export function GoalBadge({ onTrack, goalType }: { onTrack: boolean | null; goalType: string }) {
-  if (onTrack === null) return <Badge>no income yet</Badge>
-  if (onTrack) {
-    return (
-      <Badge tone="good" icon={<CheckIcon {...ICON} />}>
-        {goalType === 'save' ? 'goal reached' : 'within limit'}
-      </Badge>
-    )
-  }
-  return (
-    <Badge
-      tone={goalType === 'save' ? 'warning' : 'critical'}
-      icon={<AlertTriangleIcon {...ICON} />}
-    >
-      {goalType === 'save' ? 'behind' : 'over limit'}
+/** A bucket's envelope: fine, or spent past what it holds. */
+export function EnvelopeBadge({ over }: { over: boolean }) {
+  return over ? (
+    <Badge tone="critical" icon={<AlertTriangleIcon {...ICON} />}>
+      overspent
+    </Badge>
+  ) : (
+    <Badge tone="good" icon={<CheckIcon {...ICON} />}>
+      in budget
     </Badge>
   )
 }

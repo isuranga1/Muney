@@ -1,6 +1,6 @@
 from app.models.account import Account
 from app.models.base import Base
-from app.models.budget import BudgetBucket, BudgetMonth, FundEntry
+from app.models.budget import BudgetBucket, BudgetMonth, BudgetShare, FundMove
 from app.models.category import Category, MerchantRule
 from app.models.fx import FxRate
 from app.models.news import Article, Feed, FeedGroup
@@ -13,7 +13,8 @@ __all__ = [
     "Account",
     "BudgetBucket",
     "BudgetMonth",
-    "FundEntry",
+    "BudgetShare",
+    "FundMove",
     "Category",
     "MerchantRule",
     "Transaction",

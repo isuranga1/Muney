@@ -2,58 +2,59 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Panel } from '@/components/charts'
-import { GoalBadge } from '@/components/badges'
+import { EnvelopeBadge } from '@/components/badges'
+import { OverspendAlerts, approx } from '@/components/budget'
 import { MonthNav, ProgressBar, useMonthState } from '@/components/finance'
 import { AlertTriangleIcon, CheckIcon, PiggyBankIcon, PlusIcon } from '@/components/icons'
 import {
   Button,
   Card,
-  ConfirmButton,
   ErrorNote,
   Input,
+  Modal,
   SectionHeader,
   Select,
   Spinner,
   cx,
 } from '@/components/ui'
-import { MONTHS, money, percent, seriesColor } from '@/lib/format'
+import { MONTHS, monthLabel, money, percent, seriesColor, signedMoney } from '@/lib/format'
 import {
   useBudgetHistory,
   useBudgetMonth,
   useBuckets,
   useCategories,
-  useClearAllocation,
-  useConfig,
   useDeleteBucket,
+  useFunds,
   useSaveBucket,
   useSaveCategory,
-  useSetAllocation,
   useSetIncomeBasis,
 } from '@/lib/queries'
-import type { Bucket, BucketStatus, BudgetMonthStatus } from '@/types'
+import type { Bucket, BucketMonth, BudgetMonthStatus } from '@/types'
 
 export default function Budget() {
   const { year, month, set } = useMonthState()
   const status = useBudgetMonth(year, month)
+  const funds = useFunds()
 
   return (
     <div className="animate-rise flex flex-col gap-5">
       <SectionHeader
         title="Budget rule"
-        subtitle="Split every month's income by percentage, then see whether you stuck to it."
+        subtitle="Each bucket gets its percentage of every month's income. What isn't spent carries over."
         actions={
           <Link
             to="/funds"
             className="inline-flex items-center gap-1.5 text-sm text-series-1 underline-offset-2 hover:underline"
           >
             <PiggyBankIcon size={15} />
-            Fund balances
+            Balances so far
           </Link>
         }
       />
+      {funds.data && <OverspendAlerts data={funds.data} />}
       <MonthNav year={year} month={month} onChange={set} />
       <ErrorNote error={status.error} />
-      {status.isLoading ? <Spinner /> : status.data && <MonthStatus year={year} month={month} />}
+      {status.isLoading ? <Spinner /> : status.data && <MonthStatus status={status.data} />}
       <RuleEditor />
       <CategoryMapping />
       <History />
@@ -63,13 +64,12 @@ export default function Budget() {
 
 /* ---------------------------------------------------------- this month */
 
-function MonthStatus({ year, month }: { year: number; month: number }) {
-  const status = useBudgetMonth(year, month)
+function MonthStatus({ status: s }: { status: BudgetMonthStatus }) {
   const setBasis = useSetIncomeBasis()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
-  const s = status.data!
   const base = s.base_currency
+  const { year, month } = s
 
   return (
     <>
@@ -77,13 +77,15 @@ function MonthStatus({ year, month }: { year: number; month: number }) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[0.6875rem] font-semibold tracking-[0.08em] text-muted uppercase">
-              Income this rule applies to
+              Income shared out this month
             </p>
             <p className="tabular mt-1.5 text-2xl font-semibold">{money(s.income_basis, base)}</p>
             <p className="text-xs text-muted">
               {s.basis_is_override
                 ? `Set by hand · actual income so far ${money(s.income_actual, base)}`
                 : 'Actual income recorded this month'}
+              {approx(s.income_basis, s.secondary_currency, s.secondary_rate) &&
+                ` · ${approx(s.income_basis, s.secondary_currency, s.secondary_rate)}`}
             </p>
           </div>
           {editing ? (
@@ -136,62 +138,26 @@ function MonthStatus({ year, month }: { year: number; month: number }) {
             </div>
           )}
         </div>
+        {s.rule_frozen && (
+          <p className="mt-3 border-t border-hairline pt-3 text-xs text-muted">
+            {monthLabel(year, month)} keeps the percentages it had. Rule changes apply from the
+            current month on.
+          </p>
+        )}
       </Card>
 
       <section className="stagger grid gap-3 sm:grid-cols-2">
-        {s.buckets.map((b, i) => {
-          const over = b.goal_type === 'spend' && b.on_track === false
-          const remaining = b.target - b.actual
-          return (
-            <Card key={b.bucket_id} className="px-5 py-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold">{b.name}</p>
-                  <p className="text-xs text-muted">
-                    {b.goal_type === 'save' ? 'Save at least' : 'Spend at most'}{' '}
-                    {percent(b.percent)}
-                  </p>
-                </div>
-                <GoalBadge onTrack={b.on_track} goalType={b.goal_type} />
-              </div>
-              <p className="tabular mt-3 text-xl font-semibold">
-                {money(b.actual, base)}
-                <span className="text-sm font-normal text-muted"> / {money(b.target, base)}</span>
-              </p>
-              <div className="mt-2">
-                <ProgressBar value={b.progress} color={b.color || seriesColor(i)} over={over} />
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                Actually {percent(b.actual_percent, 1)} of income ·{' '}
-                {b.goal_type === 'save'
-                  ? remaining > 0
-                    ? `${money(remaining, base)} more to go`
-                    : 'target met'
-                  : remaining >= 0
-                    ? `${money(remaining, base)} left`
-                    : `${money(-remaining, base)} over`}
-              </p>
-              {b.goal_type === 'save' && (
-                <Allocation
-                  // Remount when the goal moves, so the suggested amount follows it.
-                  key={`${year}-${month}-${b.target}-${b.allocation?.id ?? 'none'}`}
-                  year={year}
-                  month={month}
-                  bucket={b}
-                  status={s}
-                />
-              )}
-            </Card>
-          )
-        })}
+        {s.buckets.map((b, i) => (
+          <Envelope key={b.bucket_id} b={b} base={base} color={b.color || seriesColor(i)} />
+        ))}
       </section>
 
       {s.unassigned_spend > 0 && (
         <Card className="flex items-start gap-2.5 border-warning/45 bg-warning/10 px-4 py-3 text-sm">
           <AlertTriangleIcon size={16} className="mt-px shrink-0 text-warning" />
           <span>
-            {money(s.unassigned_spend, base)} of spending this month isn't in any bucket —
-            uncategorised, or in a category with no bucket.{' '}
+            {money(s.unassigned_spend, base)} of spending this month isn't in any bucket, so it
+            doesn't come out of any balance. It's uncategorised, or its category has no bucket.{' '}
             <Link to="/activity?category=none" className="underline underline-offset-2">
               Review uncategorised
             </Link>{' '}
@@ -203,126 +169,77 @@ function MonthStatus({ year, month }: { year: number; month: number }) {
   )
 }
 
-/* ---------------------------------------------------------- allocation */
-
-/** The goal in another currency at today's rate: LKR 60,000 -> USD 200.00. */
-function inCurrency(baseAmount: number, currency: string, rates: Record<string, number>) {
-  const rate = rates[currency]
-  return rate ? Math.round((baseAmount / rate) * 100) / 100 : null
-}
-
-/**
- * Tick a saving bucket for the month. The money usually stays in the account
- * the salary landed in, so this records the promise, in the currency it's held.
- */
-function Allocation({
-  year,
-  month,
-  bucket,
-  status,
-}: {
-  year: number
-  month: number
-  bucket: BucketStatus
-  status: BudgetMonthStatus
-}) {
-  const config = useConfig()
-  const setAllocation = useSetAllocation()
-  const clear = useClearAllocation()
-  const base = status.base_currency
-  const done = bucket.allocation
-  const currencies = config.data?.supported_currencies ?? [base]
-  const startCurrency = done?.currency ?? status.secondary_currency ?? base
-  const suggest = (code: string) => {
-    const value = inCurrency(bucket.target, code, status.rates)
-    return value ? String(value) : ''
-  }
-
-  const [editing, setEditing] = useState(false)
-  const [currency, setCurrency] = useState(startCurrency)
-  const [amount, setAmount] = useState(done ? String(done.amount) : suggest(startCurrency))
-  const goalSecondary = status.secondary_currency
-    ? inCurrency(bucket.target, status.secondary_currency, status.rates)
-    : null
-  const vars = { bucketId: bucket.bucket_id, year, month }
+/** One bucket's month: what came in, what went out, what's left. */
+function Envelope({ b, base, color }: { b: BucketMonth; base: string; color: string }) {
+  const saving = b.goal_type === 'save'
+  const pool = Math.max(b.opening, 0) + b.share + b.moved_in
+  const used = b.spent + b.moved_out + Math.max(-b.opening, 0)
+  const rows: [string, number][] = [
+    ['From last month', b.opening],
+    [`This month's ${percent(b.percent)}`, b.share],
+    ['Moved in', b.moved_in],
+    ['Spent', -b.spent],
+    ['Moved out', -b.moved_out],
+  ]
 
   return (
-    <div className="mt-3 border-t border-hairline pt-3">
-      <p className="mb-2 text-xs text-muted">
-        Goal {money(bucket.target, base)}
-        {goalSecondary !== null && ` ≈ ${money(goalSecondary, status.secondary_currency!)}`}
-      </p>
-      <ErrorNote error={setAllocation.error ?? clear.error} />
-      {done && !editing ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-good-text">
-            <CheckIcon size={15} strokeWidth={2.25} />
-            Set aside {money(done.amount, done.currency)}
-            {done.currency !== base && done.base_amount !== null && (
-              <span className="font-normal text-muted">≈ {money(done.base_amount, base)}</span>
-            )}
-          </span>
-          <span className="flex gap-1.5">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              Change
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={clear.isPending}
-              onClick={() => clear.mutate(vars)}
-            >
-              Undo
-            </Button>
-          </span>
-        </div>
-      ) : (
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            setAllocation.mutate(
-              { ...vars, amount: Number(amount), currency },
-              { onSuccess: () => setEditing(false) },
-            )
-          }}
-        >
-          <Input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0.01"
-            required
-            aria-label={`Amount for ${bucket.name}`}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-32 flex-1 py-2"
+    <Card className={cx('px-5 py-4', b.over && 'border-critical/45')}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="mt-0.5 h-9 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: color }}
           />
-          <Select
-            aria-label="Currency"
-            value={currency}
-            onChange={(e) => {
-              setCurrency(e.target.value)
-              setAmount(suggest(e.target.value))
-            }}
-            className="w-24 py-2"
-          >
-            {currencies.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </Select>
-          {editing && (
-            <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-          )}
-          <Button type="submit" size="sm" variant="primary" disabled={setAllocation.isPending}>
-            <PiggyBankIcon size={14} />
-            {editing ? 'Save' : 'Set aside'}
-          </Button>
-        </form>
+          <div>
+            <p className="font-semibold">{b.name}</p>
+            <p className="text-xs text-muted">
+              {percent(b.percent)} of income · {saving ? 'fund' : 'monthly spending'}
+            </p>
+          </div>
+        </div>
+        <EnvelopeBadge over={b.over} />
+      </div>
+
+      <p
+        className={cx(
+          'tabular mt-3 text-xl font-semibold',
+          b.over && 'text-critical',
+        )}
+      >
+        {signedMoney(b.available, base)}
+        <span className="ml-1.5 text-sm font-normal text-muted">
+          {b.over ? 'overspent' : saving ? 'in the fund' : 'left'}
+        </span>
+      </p>
+      {!saving && (
+        <div className="mt-2">
+          <ProgressBar
+            value={pool > 0 ? (used / pool) * 100 : used > 0 ? 100 : 0}
+            color={color}
+            over={b.over}
+          />
+        </div>
       )}
-    </div>
+
+      <dl className="mt-3 flex flex-col gap-1 border-t border-hairline pt-3 text-xs">
+        {rows
+          .filter(([, v]) => v !== 0)
+          .map(([label, v]) => (
+            <div key={label} className="flex justify-between gap-3">
+              <dt className="text-muted">{label}</dt>
+              <dd className={cx('tabular', v < 0 ? 'text-ink-2' : 'text-ink')}>
+                {signedMoney(v, base)}
+              </dd>
+            </div>
+          ))}
+        {b.used_percent !== null && b.spent > 0 && (
+          <p className="mt-1 text-muted">
+            Spent {percent(b.used_percent, 1)} of income against {percent(b.percent)} planned.
+          </p>
+        )}
+      </dl>
+    </Card>
   )
 }
 
@@ -330,52 +247,48 @@ function Allocation({
 
 type BucketDraft = { id?: number; name: string; percent: string; goal_type: string; color: string }
 
+function toDraft(b: Bucket): BucketDraft {
+  return {
+    id: b.id,
+    name: b.name,
+    percent: String(b.percent),
+    goal_type: b.goal_type,
+    color: b.color ?? '#2a78d6',
+  }
+}
+
 function RuleEditor() {
   const buckets = useBuckets()
   const save = useSaveBucket()
-  const remove = useDeleteBucket()
   const [drafts, setDrafts] = useState<BucketDraft[]>([])
+  const [removing, setRemoving] = useState<Bucket | null>(null)
 
   useEffect(() => {
-    if (buckets.data) {
-      setDrafts(
-        buckets.data.map((b: Bucket) => ({
-          id: b.id,
-          name: b.name,
-          percent: String(b.percent),
-          goal_type: b.goal_type,
-          color: b.color ?? '#2a78d6',
-        })),
-      )
-    }
+    if (buckets.data) setDrafts(buckets.data.map(toDraft))
   }, [buckets.data])
 
+  // Only send the buckets that changed (or moved position).
+  const saved = new Map(
+    (buckets.data ?? []).map((b, i) => [b.id, JSON.stringify([toDraft(b), i])]),
+  )
+  const changed = drafts.filter(
+    (d, i) => !d.id || saved.get(d.id) !== JSON.stringify([d, i]),
+  )
   const total = drafts.reduce((sum, d) => sum + (Number(d.percent) || 0), 0)
-  const dirty =
-    JSON.stringify(drafts) !==
-    JSON.stringify(
-      (buckets.data ?? []).map((b) => ({
-        id: b.id,
-        name: b.name,
-        percent: String(b.percent),
-        goal_type: b.goal_type,
-        color: b.color ?? '#2a78d6',
-      })),
-    )
 
   function update(index: number, patch: Partial<BucketDraft>) {
     setDrafts(drafts.map((d, i) => (i === index ? { ...d, ...patch } : d)))
   }
 
   async function saveAll() {
-    for (const [i, d] of drafts.entries()) {
+    for (const d of changed) {
       await save.mutateAsync({
         id: d.id,
         name: d.name.trim(),
         percent: Number(d.percent) || 0,
         goal_type: d.goal_type,
         color: d.color,
-        sort_order: i,
+        sort_order: drafts.indexOf(d),
       })
     }
   }
@@ -383,7 +296,7 @@ function RuleEditor() {
   return (
     <Panel
       title="Your rule"
-      subtitle="Saving buckets are met by reaching the target; spending buckets by staying under it."
+      subtitle="Add, remove or change buckets any time. Changes apply from this month on; past months keep the rule they had."
       action={
         <span
           className={cx(
@@ -392,16 +305,16 @@ function RuleEditor() {
           )}
         >
           {total === 100 ? <CheckIcon size={13} /> : <AlertTriangleIcon size={13} />}
-          {percent(total)} allocated
+          {percent(total)} of income
         </span>
       }
     >
-      <ErrorNote error={save.error ?? remove.error} />
+      <ErrorNote error={save.error} />
       <ul className="flex flex-col gap-2">
         {drafts.map((d, i) => (
           <li
             key={d.id ?? `new-${i}`}
-            className="grid grid-cols-[auto_1fr_5.5rem] items-center gap-2 sm:grid-cols-[auto_1fr_6rem_8rem_auto]"
+            className="grid grid-cols-[auto_1fr_5.5rem] items-center gap-2 sm:grid-cols-[auto_1fr_6rem_9rem_auto]"
           >
             <input
               type="color"
@@ -410,13 +323,19 @@ function RuleEditor() {
               onChange={(e) => update(i, { color: e.target.value })}
               className="h-9 w-9 cursor-pointer rounded-lg border border-line bg-transparent"
             />
-            <Input value={d.name} onChange={(e) => update(i, { name: e.target.value })} />
+            <Input
+              value={d.name}
+              aria-label="Name"
+              placeholder="Bucket name"
+              onChange={(e) => update(i, { name: e.target.value })}
+            />
             <div className="relative">
               <Input
                 type="number"
                 inputMode="decimal"
                 min="0"
                 max="100"
+                aria-label="Percent of income"
                 value={d.percent}
                 onChange={(e) => update(i, { percent: e.target.value })}
                 className="pr-7 text-right"
@@ -426,19 +345,22 @@ function RuleEditor() {
               </span>
             </div>
             <Select
+              aria-label="Kind"
               value={d.goal_type}
               onChange={(e) => update(i, { goal_type: e.target.value })}
               className="col-span-2 sm:col-span-1"
             >
-              <option value="save">Save ≥</option>
-              <option value="spend">Spend ≤</option>
+              <option value="save">Fund (saves up)</option>
+              <option value="spend">Monthly spending</option>
             </Select>
             {d.id ? (
-              <ConfirmButton
-                label="Remove"
-                onConfirm={() => remove.mutate(d.id!)}
-                message={`Remove "${d.name}"? Categories mapped to it become unassigned.`}
-              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setRemoving(buckets.data?.find((b) => b.id === d.id) ?? null)}
+              >
+                Remove
+              </Button>
             ) : (
               <Button
                 size="sm"
@@ -451,6 +373,13 @@ function RuleEditor() {
           </li>
         ))}
       </ul>
+      {total !== 100 && drafts.length > 0 && (
+        <p className="mt-3 text-xs text-warning">
+          {total < 100
+            ? `${percent(100 - total)} of income isn't going to any bucket.`
+            : `That's ${percent(total - 100)} more than your income.`}
+        </p>
+      )}
       <div className="mt-4 flex flex-wrap justify-between gap-2">
         <Button
           size="sm"
@@ -464,13 +393,74 @@ function RuleEditor() {
         <Button
           size="sm"
           variant="primary"
-          disabled={!dirty || save.isPending || drafts.some((d) => !d.name.trim())}
+          disabled={!changed.length || save.isPending || drafts.some((d) => !d.name.trim())}
           onClick={() => void saveAll()}
         >
           {save.isPending ? 'Saving…' : 'Save rule'}
         </Button>
       </div>
+      {removing && <RemoveBucket bucket={removing} onClose={() => setRemoving(null)} />}
     </Panel>
+  )
+}
+
+/** Removing a bucket: its balance goes to another bucket, or is dropped. */
+function RemoveBucket({ bucket, onClose }: { bucket: Bucket; onClose: () => void }) {
+  const funds = useFunds()
+  const remove = useDeleteBucket()
+  const fund = funds.data?.funds.find((f) => f.bucket_id === bucket.id)
+  const others = funds.data?.funds.filter((f) => f.bucket_id !== bucket.id) ?? []
+  const [moveTo, setMoveTo] = useState<number | 0>(others[0]?.bucket_id ?? 0)
+  const base = funds.data?.base_currency ?? ''
+  const balance = fund?.balance ?? 0
+
+  return (
+    <Modal open title={`Remove ${bucket.name}?`} onClose={onClose}>
+      {funds.isLoading ? (
+        <Spinner />
+      ) : (
+        <div className="flex flex-col gap-4 text-sm">
+          <p className="text-ink-2">
+            Categories in it become unassigned. Past months keep their numbers.
+          </p>
+          {balance !== 0 && (
+            <label className="flex flex-col gap-1.5">
+              <span>
+                It {balance > 0 ? 'holds' : 'is overspent by'}{' '}
+                <span className={cx('tabular font-semibold', balance < 0 && 'text-critical')}>
+                  {money(Math.abs(balance), base)}
+                </span>
+                . {balance > 0 ? 'Move it to' : 'Cover it from'}:
+              </span>
+              <Select value={moveTo} onChange={(e) => setMoveTo(Number(e.target.value))}>
+                {others.map((f) => (
+                  <option key={f.bucket_id} value={f.bucket_id}>
+                    {f.name}
+                  </option>
+                ))}
+                <option value={0}>{balance > 0 ? 'Nowhere, drop it' : 'Nowhere, ignore it'}</option>
+              </Select>
+            </label>
+          )}
+          <ErrorNote error={remove.error} />
+          <div className="flex justify-end gap-2">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="danger"
+              disabled={remove.isPending}
+              onClick={() =>
+                remove.mutate(
+                  { id: bucket.id, moveTo: balance !== 0 ? moveTo || null : null },
+                  { onSuccess: onClose },
+                )
+              }
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -484,8 +474,8 @@ function CategoryMapping() {
 
   return (
     <Panel
-      title="What counts toward each bucket"
-      subtitle="Spending in a category counts toward its bucket. Put savings in a category like “Emergency fund”, or map a savings account on the Accounts page."
+      title="What comes out of each bucket"
+      subtitle="Spending in a category is taken from its bucket. Spending in no bucket isn't taken from any."
     >
       <ErrorNote error={save.error} />
       <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
@@ -523,14 +513,17 @@ function History() {
   if (!history.data || !buckets.data?.length) return null
 
   return (
-    <Panel title="Last 12 months" subtitle="Did each month follow the rule?">
+    <Panel
+      title="Last 12 months"
+      subtitle="Share of income each bucket spent, and its balance at the month's end."
+    >
       <div className="scroll-x">
         <table className="w-full min-w-[32rem] text-sm">
           <thead>
             <tr className="text-xs text-muted">
               <th className="py-2 text-left font-medium">Month</th>
               {buckets.data.map((b) => (
-                <th key={b.id} className="px-2 py-2 text-center font-medium">
+                <th key={b.id} className="px-2 py-2 text-right font-medium">
                   {b.name}
                 </th>
               ))}
@@ -545,24 +538,28 @@ function History() {
                 </td>
                 {buckets.data.map((b) => {
                   const s = m.buckets.find((x) => x.bucket_id === b.id)
-                  if (!s || s.on_track === null)
+                  if (!s || (s.share === 0 && s.spent === 0 && s.available === 0))
                     return (
-                      <td key={b.id} className="px-2 py-2 text-center text-muted">
+                      <td key={b.id} className="px-2 py-2 text-right text-muted">
                         ·
                       </td>
                     )
                   return (
-                    <td key={b.id} className="px-2 py-2 text-center">
+                    <td key={b.id} className="px-2 py-2 text-right">
                       <span
-                        title={`${money(s.actual, m.base_currency)} of ${money(s.target, m.base_currency)}`}
                         className={cx(
-                          'inline-flex items-center gap-1 text-xs font-medium',
-                          s.on_track ? 'text-good-text' : 'text-critical',
+                          'tabular inline-flex items-center gap-1 text-xs font-medium',
+                          s.over ? 'text-critical' : 'text-ink',
                         )}
                       >
-                        {s.on_track ? <CheckIcon size={13} /> : <AlertTriangleIcon size={13} />}
-                        {percent(s.actual_percent)}
+                        {s.over && <AlertTriangleIcon size={12} />}
+                        {money(s.available, m.base_currency, { compact: true })}
                       </span>
+                      {s.used_percent !== null && (
+                        <span className="block text-[0.6875rem] text-muted">
+                          spent {percent(s.used_percent)} / {percent(s.percent)}
+                        </span>
+                      )}
                     </td>
                   )
                 })}

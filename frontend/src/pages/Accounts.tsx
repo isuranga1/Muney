@@ -19,7 +19,7 @@ import {
   Spinner,
 } from '@/components/ui'
 import { signedMoney, titleCase } from '@/lib/format'
-import { useAccounts, useBuckets, useConfig, useDeleteAccount, useSaveAccount } from '@/lib/queries'
+import { useAccounts, useConfig, useDeleteAccount, useSaveAccount } from '@/lib/queries'
 import type { Account } from '@/types'
 
 type Draft = {
@@ -31,7 +31,6 @@ type Draft = {
   balance: string
   last_digits: string
   color: string
-  bucket_id: number | null
   include_in_total: boolean
   is_archived: boolean
   notes: string
@@ -51,7 +50,6 @@ const COLORS = [
 export default function Accounts() {
   const config = useConfig()
   const accounts = useAccounts()
-  const buckets = useBuckets()
   const save = useSaveAccount()
   const remove = useDeleteAccount()
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -70,7 +68,6 @@ export default function Accounts() {
       balance: '',
       last_digits: '',
       color: COLORS[(accounts.data?.accounts.length ?? 0) % COLORS.length],
-      bucket_id: null,
       include_in_total: true,
       is_archived: false,
       notes: '',
@@ -88,7 +85,6 @@ export default function Accounts() {
       balance: String(a.balance),
       last_digits: a.last_digits ?? '',
       color: a.color ?? COLORS[0],
-      bucket_id: a.bucket_id,
       include_in_total: a.include_in_total,
       is_archived: a.is_archived,
       notes: a.notes ?? '',
@@ -108,7 +104,6 @@ export default function Accounts() {
         balance: Number(draft.balance || 0),
         last_digits: draft.last_digits.replace(/\D/g, '') || null,
         color: draft.color,
-        bucket_id: draft.bucket_id,
         include_in_total: draft.include_in_total,
         notes: draft.notes.trim() || null,
         ...(draft.id ? { is_archived: draft.is_archived } : {}),
@@ -309,25 +304,6 @@ export default function Accounts() {
                 />
               </Field>
             </div>
-
-            <Field
-              label="Counts toward budget bucket"
-              hint="Transfers into this account count as saving for that bucket — e.g. an emergency-fund account."
-            >
-              <Select
-                value={draft.bucket_id ?? ''}
-                onChange={(e) =>
-                  setDraft({ ...draft, bucket_id: e.target.value ? Number(e.target.value) : null })
-                }
-              >
-                <option value="">None</option>
-                {buckets.data?.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
 
             <div>
               <span className="mb-1.5 block text-xs font-medium tracking-wide text-ink-2">

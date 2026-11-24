@@ -2,10 +2,9 @@
 
 Everything is summed from `Transaction.base_amount` — the base-currency value
 frozen when the transaction was recorded — so a past month's totals don't move
-when exchange rates do. Transfers are never income or spending; they only
-count toward budget buckets (money moved into an emergency-fund account is
-money saved). So do fund entries: money set aside for a bucket while it stays
-in the account it's in.
+when exchange rates do. Transfers are never income or spending, and never
+touch the budget: buckets are envelopes on paper, so the money can stay in
+whichever account it landed in.
 """
 
 from __future__ import annotations
@@ -15,27 +14,31 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Account, BudgetBucket, BudgetMonth, Category, FundEntry, Transaction
+from app.models import (
+    BudgetBucket,
+    BudgetMonth,
+    BudgetShare,
+    Category,
+    FundMove,
+    Transaction,
+)
 from app.schemas.finance import (
-    BucketStatus,
+    BucketMonth,
     BudgetMonthStatus,
     CategoryTotal,
     CategoryYearRow,
-    CurrencyEarmark,
     DayTotal,
-    FundEntryRead,
-    FundHolding,
     FundsOverview,
     FundStatus,
     MonthReport,
     MonthTotal,
     YearReport,
 )
-from app.services.fx import convert, get_rate_map, quantize_money
+from app.services.fx import get_rate_map, quantize_money
 
 ZERO = Decimal("0.00")
 
@@ -195,6 +198,12 @@ def year_report(db: Session, year: int) -> YearReport:
 
 
 # ------------------------------------------------------------------- budget
+#
+# Every bucket is an envelope. Each month it receives that month's income x
+# its percent, spending in its categories comes out, and what's left carries
+# into the next month. Moves cover one bucket from another, or add or take out
+# money. One pass from the first month with data computes every month, so the
+# month view, the history and the fund balances always agree.
 
 
 def _secondary() -> str:
@@ -202,289 +211,257 @@ def _secondary() -> str:
     return "" if code == settings.base_currency else code
 
 
-def _bucket_actuals(
-    txns: list[Transaction], categories: dict[int, Category], account_bucket: dict[int, int]
-) -> tuple[dict[int, Decimal], Decimal]:
-    """What each bucket used in these transactions, and spending in no bucket."""
-    actual: dict[int, Decimal] = defaultdict(lambda: ZERO)
-    unassigned = ZERO
-    for txn in txns:
-        value = _value(txn)
-        if txn.kind == "expense":
-            category = categories.get(txn.category_id) if txn.category_id else None
-            if category and category.bucket_id:
-                actual[category.bucket_id] += value
-            else:
-                unassigned += value
-        elif txn.kind == "transfer":
-            into = account_bucket.get(txn.to_account_id)
-            out_of = account_bucket.get(txn.account_id)
-            # Moving money between two accounts of the same bucket is a wash.
-            if into != out_of:
-                if into:
-                    actual[into] += value
-                if out_of:
-                    actual[out_of] -= value
-    return actual, unassigned
+def next_month(year: int, month: int) -> tuple[int, int]:
+    return (year + 1, 1) if month == 12 else (year, month + 1)
 
 
-def _on_track(goal_type: str, actual: Decimal, target: Decimal) -> bool | None:
-    if target <= 0:
-        return None
-    return actual >= target if goal_type == "save" else actual <= target
+def _ym(day: date) -> tuple[int, int]:
+    return day.year, day.month
 
 
-def budget_status(db: Session, year: int, month: int) -> BudgetMonthStatus:
-    start, end = month_bounds(year, month)
-    txns = _transactions(db, start, end)
-    account_bucket = {
-        a.id: a.bucket_id for a in db.scalars(select(Account)).all() if a.bucket_id is not None
-    }
-    buckets = list(db.scalars(select(BudgetBucket).order_by(BudgetBucket.sort_order)).all())
-    allocations = {
-        e.bucket_id: e
-        for e in db.scalars(
-            select(FundEntry).where(
-                FundEntry.kind == "monthly", FundEntry.year == year, FundEntry.month == month
-            )
-        ).all()
-    }
+def first_month(db: Session) -> tuple[int, int] | None:
+    """The earliest month anything in the budget can come from."""
+    candidates = [
+        db.scalar(select(func.min(Transaction.occurred_on))),
+        db.scalar(select(func.min(FundMove.moved_on))),
+    ]
+    months = [_ym(d) for d in candidates if d is not None]
+    override = db.execute(
+        select(BudgetMonth.year, BudgetMonth.month).order_by(BudgetMonth.year, BudgetMonth.month)
+    ).first()
+    if override is not None:
+        months.append((override[0], override[1]))
+    return min(months) if months else None
 
-    income = _sum(txns, "income")
-    override = db.scalar(
-        select(BudgetMonth).where(BudgetMonth.year == year, BudgetMonth.month == month)
-    )
-    basis = Decimal(override.income_basis) if override else income
-    actual, unassigned = _bucket_actuals(txns, _categories(db), account_bucket)
 
-    statuses = []
-    for bucket in buckets:
-        target = basis * Decimal(bucket.percent) / 100
-        spent = actual[bucket.id]
-        # A ticked allocation is money saved, even though it never left the account.
-        allocation = allocations.get(bucket.id) if bucket.goal_type == "save" else None
-        if allocation is not None:
-            spent += Decimal(allocation.base_amount or 0)
-        statuses.append(
-            BucketStatus(
+def freeze_past_shares(db: Session) -> None:
+    """Pin every finished month to the percentages it's using right now.
+
+    Called before the rule changes, so the change applies from this month on
+    and past balances stay put. Months that already have rows are left alone.
+    Doesn't commit.
+    """
+    start = first_month(db)
+    if start is None:
+        return
+    current = _ym(date.today())
+    buckets = list(db.scalars(select(BudgetBucket)).all())
+    frozen = {(y, m) for y, m in db.execute(select(BudgetShare.year, BudgetShare.month)).all()}
+    ym = start
+    while ym < current:
+        if ym not in frozen:
+            for bucket in buckets:
+                db.add(
+                    BudgetShare(year=ym[0], month=ym[1], bucket_id=bucket.id, percent=bucket.percent)
+                )
+        ym = next_month(*ym)
+    db.flush()
+
+
+class _Line:
+    __slots__ = ("percent", "opening", "share", "spent", "moved_in", "moved_out")
+
+    def __init__(self, percent: Decimal, opening: Decimal) -> None:
+        self.percent = percent
+        self.opening = opening
+        self.share = ZERO
+        self.spent = ZERO
+        self.moved_in = ZERO
+        self.moved_out = ZERO
+
+    @property
+    def available(self) -> Decimal:
+        return self.opening + self.share + self.moved_in - self.spent - self.moved_out
+
+
+class _Month:
+    __slots__ = ("income", "basis", "override", "frozen", "unassigned", "lines")
+
+    def __init__(self) -> None:
+        self.income = ZERO
+        self.basis = ZERO
+        self.override = False
+        self.frozen = False
+        self.unassigned = ZERO
+        self.lines: dict[int, _Line] = {}
+
+
+class Ledger:
+    """Every bucket, every month from the first with data through `until`."""
+
+    def __init__(self, db: Session, until: tuple[int, int] | None = None) -> None:
+        current = _ym(date.today())
+        until = max(until or current, current)
+        self.buckets = list(
+            db.scalars(select(BudgetBucket).order_by(BudgetBucket.sort_order)).all()
+        )
+        self.start = min(first_month(db) or current, until)
+        last_day = month_bounds(*until)[1]
+
+        txns = _transactions(db, month_bounds(*self.start)[0], last_day)
+        categories = _categories(db)
+        overrides = {
+            (r.year, r.month): Decimal(r.income_basis)
+            for r in db.scalars(select(BudgetMonth)).all()
+        }
+        shares: dict[tuple[int, int], dict[int, Decimal]] = defaultdict(dict)
+        for row in db.scalars(select(BudgetShare)).all():
+            shares[(row.year, row.month)][row.bucket_id] = Decimal(row.percent)
+        live = {b.id: Decimal(b.percent) for b in self.buckets}
+
+        by_month: dict[tuple[int, int], list[Transaction]] = defaultdict(list)
+        for txn in txns:
+            by_month[_ym(txn.occurred_on)].append(txn)
+        moves_by_month: dict[tuple[int, int], list[FundMove]] = defaultdict(list)
+        for move in db.scalars(select(FundMove).where(FundMove.moved_on <= last_day)).all():
+            moves_by_month[_ym(move.moved_on)].append(move)
+
+        self.months: dict[tuple[int, int], _Month] = {}
+        carried = {b.id: ZERO for b in self.buckets}
+        ym = self.start
+        while ym <= until:
+            m = _Month()
+            in_month = by_month.get(ym, [])
+            m.income = _sum(in_month, "income")
+            m.override = ym in overrides
+            m.basis = overrides.get(ym, m.income)
+            m.frozen = ym in shares
+            percents = shares.get(ym, live)
+            for bucket in self.buckets:
+                line = _Line(percents.get(bucket.id, ZERO), carried[bucket.id])
+                line.share = m.basis * line.percent / 100
+                m.lines[bucket.id] = line
+            for txn in in_month:
+                if txn.kind != "expense":
+                    continue
+                category = categories.get(txn.category_id) if txn.category_id else None
+                line = m.lines.get(category.bucket_id) if category and category.bucket_id else None
+                if line is not None:
+                    line.spent += _value(txn)
+                else:
+                    m.unassigned += _value(txn)
+            for move in moves_by_month.get(ym, []):
+                amount = Decimal(move.amount)
+                if move.to_bucket_id in m.lines:
+                    m.lines[move.to_bucket_id].moved_in += amount
+                if move.from_bucket_id in m.lines:
+                    m.lines[move.from_bucket_id].moved_out += amount
+            carried = {bid: line.available for bid, line in m.lines.items()}
+            self.months[ym] = m
+            ym = next_month(*ym)
+
+    def month(self, year: int, month: int) -> _Month:
+        """A month before the first with data is empty."""
+        found = self.months.get((year, month))
+        if found is not None:
+            return found
+        empty = _Month()
+        empty.lines = {b.id: _Line(Decimal(b.percent), ZERO) for b in self.buckets}
+        return empty
+
+    def balance(self, bucket_id: int) -> Decimal:
+        """What the bucket holds now."""
+        line = self.month(*_ym(date.today())).lines.get(bucket_id)
+        return line.available if line else ZERO
+
+
+def _secondary_fields(db: Session) -> tuple[str | None, float | None]:
+    secondary = _secondary()
+    rate = get_rate_map(db).get(secondary) if secondary else None
+    return secondary or None, float(rate) if rate else None
+
+
+def _status(
+    ledger: Ledger, year: int, month: int, secondary: tuple[str | None, float | None]
+) -> BudgetMonthStatus:
+    m = ledger.month(year, month)
+    rows = []
+    for bucket in ledger.buckets:
+        line = m.lines[bucket.id]
+        available = quantize_money(line.available)
+        rows.append(
+            BucketMonth(
                 bucket_id=bucket.id,
                 name=bucket.name,
                 color=bucket.color,
                 goal_type=bucket.goal_type,
-                percent=bucket.percent,
-                target=quantize_money(target),
-                actual=quantize_money(spent),
-                progress=float(spent / target * 100) if target > 0 else 0.0,
-                on_track=_on_track(bucket.goal_type, spent, target),
-                actual_percent=float(spent / basis * 100) if basis > 0 else None,
-                allocation=FundEntryRead.model_validate(allocation) if allocation else None,
+                percent=line.percent,
+                opening=quantize_money(line.opening),
+                share=quantize_money(line.share),
+                spent=quantize_money(line.spent),
+                moved_in=quantize_money(line.moved_in),
+                moved_out=quantize_money(line.moved_out),
+                available=available,
+                used_percent=float(line.spent / m.basis * 100) if m.basis > 0 else None,
+                over=available < 0,
             )
         )
-
     return BudgetMonthStatus(
         year=year,
         month=month,
         base_currency=settings.base_currency,
-        income_actual=quantize_money(income),
-        income_basis=quantize_money(basis),
-        basis_is_override=override is not None,
-        total_percent=sum((Decimal(b.percent) for b in buckets), ZERO),
-        buckets=statuses,
-        unassigned_spend=quantize_money(unassigned),
-        on_track_count=sum(1 for s in statuses if s.on_track),
-        secondary_currency=_secondary() or None,
-        rates={code: float(rate) for code, rate in get_rate_map(db).items()},
+        secondary_currency=secondary[0],
+        secondary_rate=secondary[1],
+        income_actual=quantize_money(m.income),
+        income_basis=quantize_money(m.basis),
+        basis_is_override=m.override,
+        total_percent=sum((line.percent for line in m.lines.values()), ZERO),
+        rule_frozen=m.frozen,
+        buckets=rows,
+        unassigned_spend=quantize_money(m.unassigned),
+        over_count=sum(1 for r in rows if r.over),
     )
 
 
-# -------------------------------------------------------------------- funds
+def budget_status(db: Session, year: int, month: int) -> BudgetMonthStatus:
+    return _status(Ledger(db, (year, month)), year, month, _secondary_fields(db))
 
 
-class _Fund:
-    def __init__(self) -> None:
-        self.holdings: dict[str, Decimal] = defaultdict(lambda: ZERO)
-        self.put_in = ZERO
-        self.taken_out = ZERO
-        self.goal = ZERO
-        self.met = 0
-        self.counted = 0
-        self.this_target = ZERO
-        self.this_actual = ZERO
-
-    def add(self, base_value: Decimal) -> None:
-        if base_value >= 0:
-            self.put_in += base_value
-        else:
-            self.taken_out -= base_value
+def budget_history(db: Session, months: int) -> list[BudgetMonthStatus]:
+    """The last N months, newest first."""
+    ledger = Ledger(db)
+    secondary = _secondary_fields(db)
+    ym = _ym(date.today())
+    out = []
+    for _ in range(months):
+        out.append(_status(ledger, *ym, secondary))
+        ym = previous_month(*ym)
+    return out
 
 
 def fund_overview(db: Session) -> FundsOverview:
-    """Every bucket's running balance, from the first month with any data to now.
-
-    Saving buckets hold real money: ticked allocations and top-ups in the
-    currency they sit in, plus spending in their categories and transfers into
-    their accounts. Their balance is those holdings at today's rates, so a fund
-    kept in USD grows in LKR when the rupee weakens.
-
-    Spending buckets are envelopes: each month adds its budget, spending takes
-    it away, and whatever wasn't spent carries forward.
-    """
-    today = date.today()
-    current = (today.year, today.month)
-    base = settings.base_currency
-    rates = get_rate_map(db)
-
-    txns = list(db.scalars(select(Transaction).where(Transaction.occurred_on <= today)).all())
-    categories = _categories(db)
-    accounts = {a.id: a for a in db.scalars(select(Account)).all()}
-    account_bucket = {a.id: a.bucket_id for a in accounts.values() if a.bucket_id is not None}
-    buckets = list(db.scalars(select(BudgetBucket).order_by(BudgetBucket.sort_order)).all())
-    saving = {b.id for b in buckets if b.goal_type == "save"}
-    overrides = {
-        (row.year, row.month): Decimal(row.income_basis)
-        for row in db.scalars(select(BudgetMonth)).all()
-    }
-    entries = list(db.scalars(select(FundEntry)).all())
-    monthly = {(e.bucket_id, e.year, e.month): e for e in entries if e.kind == "monthly"}
-
-    seen = [(t.occurred_on.year, t.occurred_on.month) for t in txns]
-    seen += [(e.year, e.month) for e in entries] + list(overrides)
-    start = min([m for m in seen if m <= current], default=current)
-
-    by_month: dict[tuple[int, int], list[Transaction]] = defaultdict(list)
-    for txn in txns:
-        by_month[(txn.occurred_on.year, txn.occurred_on.month)].append(txn)
-
-    funds = {b.id: _Fund() for b in buckets}
-
-    # Month by month: targets, goal checks, and the spending envelopes.
-    year, month = start
-    while (year, month) <= current:
-        in_month = by_month.get((year, month), [])
-        basis = overrides.get((year, month), _sum(in_month, "income"))
-        actual, _ = _bucket_actuals(in_month, categories, account_bucket)
-        for bucket in buckets:
-            fund = funds[bucket.id]
-            target = basis * Decimal(bucket.percent) / 100
-            used = actual[bucket.id]
-            if bucket.id in saving:
-                entry = monthly.get((bucket.id, year, month))
-                if entry is not None:
-                    used += Decimal(entry.base_amount or 0)
-            else:
-                fund.put_in += target
-                fund.taken_out += used
-            fund.goal += target
-            check = _on_track(bucket.goal_type, used, target)
-            if check is not None:
-                fund.counted += 1
-                fund.met += int(check)
-            if (year, month) == current:
-                fund.this_target, fund.this_actual = target, used
-        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
-
-    # What saving buckets actually hold, in the currency it's held in.
-    def leg(account_id: int | None, delta, value: Decimal) -> tuple[str, Decimal]:
-        account = accounts.get(account_id) if account_id else None
-        if account is None or delta is None:
-            return base, value
-        return account.currency, abs(Decimal(delta))
-
-    for txn in txns:
-        value = _value(txn)
-        if txn.kind == "expense":
-            category = categories.get(txn.category_id) if txn.category_id else None
-            if category and category.bucket_id in saving:
-                funds[category.bucket_id].holdings[txn.currency] += Decimal(txn.amount)
-                funds[category.bucket_id].add(value)
-        elif txn.kind == "transfer":
-            into = account_bucket.get(txn.to_account_id)
-            out_of = account_bucket.get(txn.account_id)
-            if into == out_of:
-                continue
-            if into in saving:
-                code, amount = leg(txn.to_account_id, txn.to_account_delta, value)
-                funds[into].holdings[code] += amount
-                funds[into].add(value)
-            if out_of in saving:
-                code, amount = leg(txn.account_id, txn.account_delta, value)
-                funds[out_of].holdings[code] -= amount
-                funds[out_of].add(-value)
-
-    # Entries are money promised to a fund but still sitting in your accounts.
-    set_aside: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    for entry in entries:
-        fund = funds.get(entry.bucket_id)
-        if fund is None or (entry.kind == "monthly" and entry.bucket_id not in saving):
-            continue
-        fund.add(Decimal(entry.base_amount or 0))
-        if entry.bucket_id in saving:
-            fund.holdings[entry.currency] += Decimal(entry.amount)
-            set_aside[entry.currency] += Decimal(entry.amount)
-
-    out = []
-    for bucket in buckets:
-        fund = funds[bucket.id]
-        if bucket.id in saving:
-            holdings = [
-                FundHolding(
-                    currency=code,
-                    amount=quantize_money(amount),
-                    base_value=convert(amount, code, rates),
-                )
-                for code, amount in sorted(fund.holdings.items(), key=lambda kv: kv[0] != base)
-                if quantize_money(amount) != 0
-            ]
-            balance = sum((h.base_value for h in holdings if h.base_value is not None), ZERO)
-        else:
-            balance = quantize_money(fund.put_in - fund.taken_out)
-            holdings = [FundHolding(currency=base, amount=balance, base_value=balance)]
-        out.append(
+    """Every bucket's balance today, and what built it."""
+    ledger = Ledger(db)
+    today = _ym(date.today())
+    funds = []
+    for bucket in ledger.buckets:
+        lines = [m.lines[bucket.id] for ym, m in ledger.months.items() if ym <= today]
+        now = ledger.month(*today).lines[bucket.id]
+        funds.append(
             FundStatus(
                 bucket_id=bucket.id,
                 name=bucket.name,
                 color=bucket.color,
                 goal_type=bucket.goal_type,
                 percent=bucket.percent,
-                balance=quantize_money(balance),
-                holdings=holdings,
-                put_in=quantize_money(fund.put_in),
-                taken_out=quantize_money(fund.taken_out),
-                goal_to_date=quantize_money(fund.goal),
-                months_met=fund.met,
-                months_counted=fund.counted,
-                this_month_target=quantize_money(fund.this_target),
-                this_month_actual=quantize_money(fund.this_actual),
-                allocated_this_month=(
-                    (bucket.id, *current) in monthly if bucket.id in saving else None
-                ),
+                balance=quantize_money(now.available),
+                total_share=quantize_money(sum((x.share for x in lines), ZERO)),
+                total_spent=quantize_money(sum((x.spent for x in lines), ZERO)),
+                moved_in=quantize_money(sum((x.moved_in for x in lines), ZERO)),
+                moved_out=quantize_money(sum((x.moved_out for x in lines), ZERO)),
+                this_month_share=quantize_money(now.share),
+                this_month_spent=quantize_money(now.spent),
             )
         )
-
-    in_accounts: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    for account in accounts.values():
-        if account.include_in_total and not account.is_archived and not account.is_liability:
-            in_accounts[account.currency] += Decimal(account.balance)
-    earmarks = [
-        CurrencyEarmark(
-            currency=code,
-            in_accounts=quantize_money(in_accounts[code]),
-            set_aside=quantize_money(set_aside[code]),
-            free=quantize_money(in_accounts[code] - set_aside[code]),
-        )
-        for code in sorted(set_aside, key=lambda c: c != base)
-        if quantize_money(set_aside[code]) != 0
-    ]
-
-    secondary = _secondary()
-    rate = rates.get(secondary) if secondary else None
+    secondary, rate = _secondary_fields(db)
+    unassigned = sum((m.unassigned for ym, m in ledger.months.items() if ym <= today), ZERO)
     return FundsOverview(
-        base_currency=base,
-        secondary_currency=secondary or None,
-        secondary_rate=float(rate) if rate else None,
-        since_year=start[0],
-        since_month=start[1],
-        funds=out,
-        total=quantize_money(sum((f.balance for f in out), ZERO)),
-        earmarks=earmarks,
+        base_currency=settings.base_currency,
+        secondary_currency=secondary,
+        secondary_rate=rate,
+        since_year=ledger.start[0],
+        since_month=ledger.start[1],
+        funds=funds,
+        total=quantize_money(sum((f.balance for f in funds), ZERO)),
+        unassigned_spend=quantize_money(unassigned),
     )

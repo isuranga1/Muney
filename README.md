@@ -44,18 +44,21 @@ teaches a rule for that merchant; anything left goes to the on-board LLM, which
 picks an existing category or proposes a new one (flagged for you to review).
 
 **Budget rule** — split income by percentage, e.g. 20% emergency fund, 50% daily
-expenses, 20% investment, 10% carefree. Saving buckets are met by reaching the
-target, spending buckets by staying under it. Map each category (and optionally
-a savings account) to a bucket, and see each month — and the last 12 — on or off
-track. Fully editable. Money for a saving bucket doesn't have to move: tick the
-month off with the amount you're setting aside, in the currency it sits in
-(e.g. USD in the account the salary lands in).
+expenses, 20% investment, 10% carefree. Each bucket is an envelope: every month
+it gets its percentage of that month's income automatically, spending in the
+categories mapped to it comes out, and whatever's left carries into next month.
+The money never has to move between accounts. Add, remove or re-weight buckets
+any time; a change applies from the current month on, and past months keep the
+percentages they had. Removing a bucket hands its balance to another one.
 
-**Funds** — each bucket's running balance so far. Saving funds show what's set
-aside, valued at today's rates. Spending buckets show budget not yet spent,
-carried over month to month. Also shows, per currency, how much of your account
-balances is promised to a fund and how much is free. Add an opening balance, or
-take money out when you use a fund.
+**Overspending** — when a bucket goes below zero, the Budget and Funds pages
+show an alert with a one-tap fix: cover the gap from another bucket. That moves
+money between the two balances; the percentages stay as they are.
+
+**Funds** — what each bucket holds now, and how it got there: income shared out,
+spending, and money moved in or out. Move money between buckets, add an opening
+balance, or take money out for spending outside a bucket's categories. Every
+move can be undone.
 
 **SMS inbox** — an iPhone Shortcut forwards bank SMS over Tailscale. Regex
 parsers (HNB built in) read known formats instantly; anything else goes to a

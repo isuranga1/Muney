@@ -26,7 +26,6 @@ class AccountCreate(BaseModel):
     last_digits: str | None = Field(default=None, max_length=32)
     color: str | None = Field(default=None, max_length=9)
     notes: str | None = None
-    bucket_id: int | None = None
     include_in_total: bool = True
     sort_order: int = 0
 
@@ -44,7 +43,6 @@ class AccountUpdate(BaseModel):
     last_digits: str | None = Field(default=None, max_length=32)
     color: str | None = Field(default=None, max_length=9)
     notes: str | None = None
-    bucket_id: int | None = None
     include_in_total: bool | None = None
     is_archived: bool | None = None
     sort_order: int | None = None
@@ -60,7 +58,6 @@ class AccountRead(ORMModel):
     last_digits: str | None
     color: str | None
     notes: str | None
-    bucket_id: int | None
     include_in_total: bool
     is_archived: bool
     sort_order: int
@@ -223,69 +220,49 @@ class BucketRead(ORMModel):
     sort_order: int
 
 
-class FundEntryRead(ORMModel):
-    id: int
-    bucket_id: int
-    kind: str
-    year: int
-    month: int
-    entry_date: date
-    amount: Money
-    currency: str
-    base_amount: Money | None
-    note: str | None
+class BucketMonth(BaseModel):
+    """One bucket's envelope for one month, all in base currency."""
 
-
-class AllocationSet(BaseModel):
-    """Tick a saving bucket's month: "I've set this much aside"."""
-
-    amount: Money = Field(gt=0)
-    currency: CurrencyCode
-    note: str | None = Field(default=None, max_length=200)
-
-
-class FundAdjust(BaseModel):
-    """An opening balance or top-up (positive), or money taken out (negative)."""
-
-    amount: Money
-    currency: CurrencyCode
-    entry_date: date | None = None
-    note: str | None = Field(default=None, max_length=200)
-
-
-class BucketStatus(BaseModel):
     bucket_id: int
     name: str
     color: str | None
     goal_type: str
+    # The month's percentage: frozen for finished months, the live rule otherwise.
     percent: Money
-    target: Money
-    actual: Money
-    # actual / target x 100; 0 when there is no target yet.
-    progress: float
-    # save: actual >= target. spend: actual <= target. None until there's income.
-    on_track: bool | None
-    # Share of the month's income actually used, for "planned 20% vs did 14%".
-    actual_percent: float | None
-    # Save buckets: the month's ticked allocation, if any (already in `actual`).
-    allocation: FundEntryRead | None = None
+    # Left over (or overspent) at the end of last month.
+    opening: Money
+    # income x percent
+    share: Money
+    # Spending in the bucket's categories.
+    spent: Money
+    # Covered from, or given to, other buckets; plus money added or taken out.
+    moved_in: Money
+    moved_out: Money
+    # opening + share + moved_in - spent - moved_out
+    available: Money
+    # spent / income, for "planned 50%, used 62%".
+    used_percent: float | None
+    # available < 0
+    over: bool
 
 
 class BudgetMonthStatus(BaseModel):
     year: int
     month: int
     base_currency: str
+    secondary_currency: str | None
+    # Base-currency units per 1 secondary, today.
+    secondary_rate: float | None
     income_actual: Money
     income_basis: Money
     basis_is_override: bool
     total_percent: Money
-    buckets: list[BucketStatus]
+    # A finished month that keeps the rule it had when the rule was changed.
+    rule_frozen: bool
+    buckets: list[BucketMonth]
     # Expenses whose category has no bucket — the gap in the rule.
     unassigned_spend: Money
-    on_track_count: int
-    # Today's rates (units of base per 1 unit), to show targets in other currencies.
-    secondary_currency: str | None = None
-    rates: dict[str, float] = {}
+    over_count: int
 
 
 class BudgetBasisSet(BaseModel):
@@ -293,45 +270,22 @@ class BudgetBasisSet(BaseModel):
     income_basis: Money | None = Field(default=None, ge=0)
 
 
-class FundHolding(BaseModel):
-    currency: str
-    amount: Money
-    # At today's rate; None when no rate is known.
-    base_value: Money | None
-
-
 class FundStatus(BaseModel):
+    """A bucket's balance to date."""
+
     bucket_id: int
     name: str
     color: str | None
     goal_type: str
     percent: Money
-    # save: what's set aside, at today's rates. spend: budget not yet spent.
     balance: Money
-    holdings: list[FundHolding]
-    # In base currency at the time. save: allocations, transfers, top-ups.
-    # spend: each month's budget plus top-ups.
-    put_in: Money
-    # save: withdrawals. spend: spending plus withdrawals.
-    taken_out: Money
-    # Sum of every month's target so far.
-    goal_to_date: Money
-    # Of the months that had a target, how many met it.
-    months_met: int
-    months_counted: int
-    this_month_target: Money
-    this_month_actual: Money
-    # Save buckets: has this month been ticked?
-    allocated_this_month: bool | None
-
-
-class CurrencyEarmark(BaseModel):
-    """Per currency: how much of what's in your accounts is promised to a fund."""
-
-    currency: str
-    in_accounts: Money
-    set_aside: Money
-    free: Money
+    # All months so far.
+    total_share: Money
+    total_spent: Money
+    moved_in: Money
+    moved_out: Money
+    this_month_share: Money
+    this_month_spent: Money
 
 
 class FundsOverview(BaseModel):
@@ -343,7 +297,29 @@ class FundsOverview(BaseModel):
     since_month: int
     funds: list[FundStatus]
     total: Money
-    earmarks: list[CurrencyEarmark]
+    # Spending in no bucket, all months so far — it's not in any balance.
+    unassigned_spend: Money
+
+
+class FundMoveCreate(BaseModel):
+    """Both buckets: cover one from the other. Only `to`: add money. Only `from`: take out."""
+
+    from_bucket_id: int | None = None
+    to_bucket_id: int | None = None
+    amount: Money = Field(gt=0)
+    # Converted to base currency at today's rate.
+    currency: CurrencyCode | None = None
+    moved_on: date | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+
+class FundMoveRead(ORMModel):
+    id: int
+    moved_on: date
+    from_bucket_id: int | None
+    to_bucket_id: int | None
+    amount: Money
+    note: str | None
 
 
 # ------------------------------------------------------------------- reports

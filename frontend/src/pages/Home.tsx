@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { BarList, Panel } from '@/components/charts'
-import { GoalBadge, StaleRatesBadge } from '@/components/badges'
+import { EnvelopeBadge, StaleRatesBadge } from '@/components/badges'
 import {
   DualAmount,
   MonthNav,
@@ -182,7 +182,7 @@ export default function Home() {
           title="Monthly rule"
           subtitle={
             budget.data
-              ? `${budget.data.on_track_count} of ${budget.data.buckets.length} on track · based on ${money(budget.data.income_basis, base)} income`
+              ? `${budget.data.over_count ? `${budget.data.over_count} overspent` : 'All in budget'} · ${money(budget.data.income_basis, base)} income shared out`
               : undefined
           }
           action={
@@ -200,15 +200,22 @@ export default function Home() {
                       <span className="font-medium">{b.name}</span>
                       <span className="text-xs text-muted">{percent(b.percent)}</span>
                     </span>
-                    <GoalBadge onTrack={b.on_track} goalType={b.goal_type} />
+                    <EnvelopeBadge over={b.over} />
                   </div>
                   <ProgressBar
-                    value={b.progress}
+                    value={(() => {
+                      const pool = Math.max(b.opening, 0) + b.share + b.moved_in
+                      const used = b.spent + b.moved_out + Math.max(-b.opening, 0)
+                      return pool > 0 ? (used / pool) * 100 : used > 0 ? 100 : 0
+                    })()}
                     color={b.color || seriesColor(i)}
-                    over={b.goal_type === 'spend' && b.on_track === false}
+                    over={b.over}
                   />
                   <p className="tabular mt-1 text-xs text-muted">
-                    {money(b.actual, base)} of {money(b.target, base)}
+                    {money(b.spent, base)} spent ·{' '}
+                    <span className={cx(b.over && 'font-medium text-critical')}>
+                      {signedMoney(b.available, base)} {b.over ? 'over' : 'left'}
+                    </span>
                   </p>
                 </li>
               ))}

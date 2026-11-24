@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -32,10 +32,6 @@ class Account(TimestampMixin, Base):
     last_digits: Mapped[str | None] = mapped_column(String(32))
     color: Mapped[str | None] = mapped_column(String(9))
     notes: Mapped[str | None] = mapped_column(Text)
-    # Transfers into this account count toward that budget bucket.
-    bucket_id: Mapped[int | None] = mapped_column(
-        ForeignKey("budget_buckets.id", ondelete="SET NULL"), index=True
-    )
     include_in_total: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

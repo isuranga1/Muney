@@ -11,7 +11,7 @@ import type {
   Category,
   Feed,
   FeedGroup,
-  FundEntry,
+  FundMove,
   FundsOverview,
   FeedTestResult,
   FxRate,
@@ -178,10 +178,12 @@ export function useSaveBucket() {
   )
 }
 
+/** `moveTo` takes over whatever the bucket holds (or covers its overspend). */
 export function useDeleteBucket() {
   return useInvalidating(
-    (id: number) => http.del<void>(`/budget/buckets/${id}`),
-    [keys.buckets, keys.categories, keys.accounts],
+    ({ id, moveTo }: { id: number; moveTo?: number | null }) =>
+      http.del<void>(`/budget/buckets/${id}${moveTo ? `?move_to=${moveTo}` : ''}`),
+    [keys.buckets, keys.categories],
   )
 }
 
@@ -209,25 +211,6 @@ export function useSetIncomeBasis() {
 
 /* ------------------------------------------------------------------- funds */
 
-type AllocationVars = { bucketId: number; year: number; month: number }
-
-/** Tick a saving bucket's month: this much is set aside. */
-export function useSetAllocation() {
-  return useInvalidating(
-    ({ bucketId, year, month, ...body }: AllocationVars & { amount: number; currency: string }) =>
-      http.put<BudgetMonthStatus>(`/budget/allocations/${bucketId}/${year}/${month}`, body),
-    [],
-  )
-}
-
-export function useClearAllocation() {
-  return useInvalidating(
-    ({ bucketId, year, month }: AllocationVars) =>
-      http.del<BudgetMonthStatus>(`/budget/allocations/${bucketId}/${year}/${month}`),
-    [],
-  )
-}
-
 export function useFunds() {
   return useQuery({
     queryKey: [...keys.budget, 'funds'],
@@ -235,25 +218,30 @@ export function useFunds() {
   })
 }
 
-export function useFundEntries(bucketId: number | null) {
+export function useMoves(bucketId?: number) {
   return useQuery({
-    queryKey: [...keys.budget, 'fund-entries', bucketId],
-    queryFn: () => http.get<FundEntry[]>(`/budget/funds/${bucketId}/entries`),
-    enabled: bucketId !== null,
+    queryKey: [...keys.budget, 'moves', bucketId ?? 'all'],
+    queryFn: () =>
+      http.get<FundMove[]>(bucketId ? `/budget/moves?bucket_id=${bucketId}` : '/budget/moves'),
   })
 }
 
-/** A top-up or opening balance (positive), or money taken out (negative). */
-export function useAddFundEntry() {
-  return useInvalidating(
-    ({ bucketId, ...body }: Body & { bucketId: number }) =>
-      http.post<FundEntry>(`/budget/funds/${bucketId}/entries`, body),
-    [],
-  )
+export type MoveBody = {
+  from_bucket_id?: number | null
+  to_bucket_id?: number | null
+  amount: number
+  currency?: string
+  moved_on?: string
+  note?: string | null
 }
 
-export function useDeleteFundEntry() {
-  return useInvalidating((id: number) => http.del<void>(`/budget/funds/entries/${id}`), [])
+/** Cover a bucket from another, or add money to / take it out of one. */
+export function useMoveMoney() {
+  return useInvalidating((body: MoveBody) => http.post<FundMove>('/budget/moves', body), [])
+}
+
+export function useDeleteMove() {
+  return useInvalidating((id: number) => http.del<void>(`/budget/moves/${id}`), [])
 }
 
 /* ----------------------------------------------------------------- reports */

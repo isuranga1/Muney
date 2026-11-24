@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import settings
-from app.models import Account, BudgetBucket, Transaction
+from app.models import Account, Transaction
 from app.schemas.finance import (
     AccountCreate,
     AccountRead,
@@ -42,11 +42,6 @@ def _get(db: DbSession, account_id: int) -> Account:
     if account is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     return account
-
-
-def _check_bucket(db: DbSession, bucket_id: int | None) -> None:
-    if bucket_id is not None and db.get(BudgetBucket, bucket_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Budget bucket not found")
 
 
 @router.get("/accounts", response_model=AccountsOverview)
@@ -105,7 +100,6 @@ def overview(
 
 @router.post("/accounts", response_model=AccountRead, status_code=status.HTTP_201_CREATED)
 def create_account(payload: AccountCreate, db: DbSession, current_user: CurrentUser) -> AccountRead:
-    _check_bucket(db, payload.bucket_id)
     account = Account(**payload.model_dump())
     db.add(account)
     db.commit()
@@ -119,7 +113,6 @@ def update_account(
 ) -> AccountRead:
     account = _get(db, account_id)
     data = payload.model_dump(exclude_unset=True)
-    _check_bucket(db, data.get("bucket_id"))
     if "currency" in data and data["currency"] != account.currency:
         used = db.scalar(
             select(func.count())

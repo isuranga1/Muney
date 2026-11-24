@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 
 import * as Icons from '@/components/icons'
 import {
-  GoalBadge,
+  EnvelopeBadge,
   LlmBadge,
   InactiveBadge,
   LiabilityBadge,
@@ -29,8 +29,8 @@ createRoot(document.getElementById('root')!).render(
 
       <h2 className="mt-10 mb-4 text-base font-semibold">Status badges</h2>
       <div className="flex flex-wrap gap-2">
-        <GoalBadge onTrack goalType="save" />
-        <GoalBadge onTrack={false} goalType="spend" />
+        <EnvelopeBadge over={false} />
+        <EnvelopeBadge over />
         <LlmBadge />
         <NoRateBadge />
         <StaleRatesBadge />

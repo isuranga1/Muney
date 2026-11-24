@@ -40,7 +40,6 @@ export interface Account {
   last_digits: string | null
   color: string | null
   notes: string | null
-  bucket_id: number | null
   include_in_total: boolean
   is_archived: boolean
   sort_order: number
@@ -131,57 +130,45 @@ export interface Bucket {
   sort_order: number
 }
 
-export interface BucketStatus {
+/** One bucket's envelope for one month, in base currency. */
+export interface BucketMonth {
   bucket_id: number
   name: string
   color: string | null
   goal_type: 'save' | 'spend'
+  /** The month's percentage — frozen for finished months. */
   percent: number
-  target: number
-  actual: number
-  progress: number
-  on_track: boolean | null
-  actual_percent: number | null
-  /** Saving buckets: the month's ticked allocation, already counted in `actual`. */
-  allocation: FundEntry | null
+  /** Left over (negative: overspent) from last month. */
+  opening: number
+  /** income × percent */
+  share: number
+  spent: number
+  moved_in: number
+  moved_out: number
+  /** opening + share + moved_in − spent − moved_out */
+  available: number
+  used_percent: number | null
+  over: boolean
 }
 
 export interface BudgetMonthStatus {
   year: number
   month: number
   base_currency: string
+  secondary_currency: string | null
+  secondary_rate: number | null
   income_actual: number
   income_basis: number
   basis_is_override: boolean
   total_percent: number
-  buckets: BucketStatus[]
+  /** A finished month that keeps the rule it had. */
+  rule_frozen: boolean
+  buckets: BucketMonth[]
   unassigned_spend: number
-  on_track_count: number
-  secondary_currency: string | null
-  /** Units of base currency per 1 unit, at today's rates. */
-  rates: Record<string, number>
+  over_count: number
 }
 
 /* ------------------------------------------------------------------- funds */
-
-export interface FundEntry {
-  id: number
-  bucket_id: number
-  kind: 'monthly' | 'adjust'
-  year: number
-  month: number
-  entry_date: string
-  amount: number
-  currency: string
-  base_amount: number | null
-  note: string | null
-}
-
-export interface FundHolding {
-  currency: string
-  amount: number
-  base_value: number | null
-}
 
 export interface FundStatus {
   bucket_id: number
@@ -190,22 +177,12 @@ export interface FundStatus {
   goal_type: 'save' | 'spend'
   percent: number
   balance: number
-  holdings: FundHolding[]
-  put_in: number
-  taken_out: number
-  goal_to_date: number
-  months_met: number
-  months_counted: number
-  this_month_target: number
-  this_month_actual: number
-  allocated_this_month: boolean | null
-}
-
-export interface CurrencyEarmark {
-  currency: string
-  in_accounts: number
-  set_aside: number
-  free: number
+  total_share: number
+  total_spent: number
+  moved_in: number
+  moved_out: number
+  this_month_share: number
+  this_month_spent: number
 }
 
 export interface FundsOverview {
@@ -216,7 +193,17 @@ export interface FundsOverview {
   since_month: number
   funds: FundStatus[]
   total: number
-  earmarks: CurrencyEarmark[]
+  unassigned_spend: number
+}
+
+/** Both buckets: a cover. Only `to`: money added. Only `from`: taken out. */
+export interface FundMove {
+  id: number
+  moved_on: string
+  from_bucket_id: number | null
+  to_bucket_id: number | null
+  amount: number
+  note: string | null
 }
 
 /* ----------------------------------------------------------------- reports */

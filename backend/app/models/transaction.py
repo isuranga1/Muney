@@ -13,10 +13,8 @@ class Transaction(TimestampMixin, Base):
     kind:
         expense  — out of `account_id`
         income   — into `account_id`
-        transfer — out of `account_id`, into `to_account_id`; excluded from
-                   income/expense totals, but counts toward the destination
-                   account's budget bucket (that's how "saved 20%" is measured
-                   when you save by moving money to a separate account).
+        transfer — out of `account_id`, into `to_account_id`; never income,
+                   spending, or part of the budget rule.
 
     `base_amount` is the amount in the base currency at the rate on the day it
     was recorded, so last year's reports don't shift every time LKR moves.

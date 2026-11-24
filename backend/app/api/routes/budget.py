@@ -2,24 +2,24 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession
-from app.models import BudgetBucket, BudgetMonth, FundEntry
+from app.core.config import settings
+from app.models import BudgetBucket, BudgetMonth, FundMove
 from app.schemas.finance import (
-    AllocationSet,
     BucketCreate,
     BucketRead,
     BucketUpdate,
     BudgetBasisSet,
     BudgetMonthStatus,
-    FundAdjust,
-    FundEntryRead,
+    FundMoveCreate,
+    FundMoveRead,
     FundsOverview,
 )
 from app.services import reports
-from app.services.fx import convert, get_rate_map
+from app.services.fx import convert, get_rate_map, quantize_money
 
 router = APIRouter(prefix="/budget", tags=["budget"])
 
@@ -41,6 +41,12 @@ def _commit(db: DbSession) -> None:
         ) from exc
 
 
+# ------------------------------------------------------------------ the rule
+#
+# Every change to the rule first pins finished months to the percentages they
+# had, so a change applies from this month on and past balances don't move.
+
+
 @router.get("/buckets", response_model=list[BucketRead])
 def list_buckets(db: DbSession, current_user: CurrentUser) -> list[BudgetBucket]:
     return list(db.scalars(select(BudgetBucket).order_by(BudgetBucket.sort_order)).all())
@@ -48,6 +54,7 @@ def list_buckets(db: DbSession, current_user: CurrentUser) -> list[BudgetBucket]
 
 @router.post("/buckets", response_model=BucketRead, status_code=status.HTTP_201_CREATED)
 def create_bucket(payload: BucketCreate, db: DbSession, current_user: CurrentUser) -> BudgetBucket:
+    reports.freeze_past_shares(db)
     bucket = BudgetBucket(**payload.model_dump())
     db.add(bucket)
     _commit(db)
@@ -60,7 +67,10 @@ def update_bucket(
     bucket_id: int, payload: BucketUpdate, db: DbSession, current_user: CurrentUser
 ) -> BudgetBucket:
     bucket = _get(db, bucket_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "percent" in data and Decimal(data["percent"]) != Decimal(bucket.percent):
+        reports.freeze_past_shares(db)
+    for field, value in data.items():
         setattr(bucket, field, value)
     _commit(db)
     db.refresh(bucket)
@@ -68,11 +78,40 @@ def update_bucket(
 
 
 @router.delete("/buckets/{bucket_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_bucket(bucket_id: int, db: DbSession, current_user: CurrentUser) -> Response:
-    """Categories and accounts mapped to it become unassigned."""
-    db.delete(_get(db, bucket_id))
+def delete_bucket(
+    bucket_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+    move_to: int | None = Query(default=None, description="Bucket that takes over its balance"),
+) -> Response:
+    """Categories mapped to it become unassigned.
+
+    With `move_to`, whatever it holds goes to that bucket first (or, if it's
+    overspent, that bucket covers the gap). Without it, the balance is dropped.
+    """
+    bucket = _get(db, bucket_id)
+    if move_to is not None:
+        if move_to == bucket_id:
+            raise HTTPException(status_code=422, detail="Pick a different bucket")
+        _get(db, move_to)
+        balance = quantize_money(reports.Ledger(db).balance(bucket_id))
+        if balance != 0:
+            db.add(
+                FundMove(
+                    moved_on=date.today(),
+                    from_bucket_id=bucket_id if balance > 0 else move_to,
+                    to_bucket_id=move_to if balance > 0 else bucket_id,
+                    amount=abs(balance),
+                    note=f"Balance of {bucket.name}, removed",
+                )
+            )
+    reports.freeze_past_shares(db)
+    db.delete(bucket)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------- the months
 
 
 @router.get("/month", response_model=BudgetMonthStatus)
@@ -108,85 +147,11 @@ def set_basis(
 def history(
     db: DbSession, current_user: CurrentUser, months: int = Query(default=12, ge=1, le=36)
 ) -> list[BudgetMonthStatus]:
-    """The last N months, newest first — "did I hit my rule each month?"."""
-    year, month = date.today().year, date.today().month
-    out = []
-    for _ in range(months):
-        out.append(reports.budget_status(db, year, month))
-        year, month = reports.previous_month(year, month)
-    return out
+    """The last N months, newest first."""
+    return reports.budget_history(db, months)
 
 
-# -------------------------------------------------------------------- funds
-
-
-def _base_value(db: DbSession, amount: Decimal, currency: str) -> Decimal:
-    """Frozen at today's rate, like a transaction's base_amount."""
-    value = convert(amount, currency, get_rate_map(db))
-    if value is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"No exchange rate for {currency} yet — refresh rates or set one in Settings",
-        )
-    return value
-
-
-def _month_date(year: int, month: int) -> date:
-    """Today if it's that month; otherwise the month's last (or first) day."""
-    start, end = reports.month_bounds(year, month)
-    return min(max(date.today(), start), end)
-
-
-@router.put("/allocations/{bucket_id}/{year}/{month}", response_model=BudgetMonthStatus)
-def set_allocation(
-    bucket_id: int,
-    year: int,
-    month: int,
-    payload: AllocationSet,
-    db: DbSession,
-    current_user: CurrentUser,
-) -> BudgetMonthStatus:
-    """Tick a saving bucket for the month: this much is set aside, wherever it sits."""
-    if not 1 <= month <= 12:
-        raise HTTPException(status_code=422, detail="month must be 1-12")
-    if _get(db, bucket_id).goal_type != "save":
-        raise HTTPException(status_code=422, detail="Only saving buckets take allocations")
-    entry = db.scalar(
-        select(FundEntry).where(
-            FundEntry.bucket_id == bucket_id,
-            FundEntry.kind == "monthly",
-            FundEntry.year == year,
-            FundEntry.month == month,
-        )
-    )
-    if entry is None:
-        entry = FundEntry(bucket_id=bucket_id, kind="monthly", year=year, month=month)
-        db.add(entry)
-    entry.entry_date = _month_date(year, month)
-    entry.amount = payload.amount
-    entry.currency = payload.currency
-    entry.base_amount = _base_value(db, payload.amount, payload.currency)
-    entry.note = payload.note
-    db.commit()
-    return reports.budget_status(db, year, month)
-
-
-@router.delete("/allocations/{bucket_id}/{year}/{month}", response_model=BudgetMonthStatus)
-def clear_allocation(
-    bucket_id: int, year: int, month: int, db: DbSession, current_user: CurrentUser
-) -> BudgetMonthStatus:
-    entry = db.scalar(
-        select(FundEntry).where(
-            FundEntry.bucket_id == bucket_id,
-            FundEntry.kind == "monthly",
-            FundEntry.year == year,
-            FundEntry.month == month,
-        )
-    )
-    if entry is not None:
-        db.delete(entry)
-        db.commit()
-    return reports.budget_status(db, year, month)
+# --------------------------------------------------------------------- funds
 
 
 @router.get("/funds", response_model=FundsOverview)
@@ -194,51 +159,65 @@ def funds(db: DbSession, current_user: CurrentUser) -> FundsOverview:
     return reports.fund_overview(db)
 
 
-@router.get("/funds/{bucket_id}/entries", response_model=list[FundEntryRead])
-def fund_entries(bucket_id: int, db: DbSession, current_user: CurrentUser) -> list[FundEntry]:
-    _get(db, bucket_id)
-    return list(
-        db.scalars(
-            select(FundEntry)
-            .where(FundEntry.bucket_id == bucket_id)
-            .order_by(FundEntry.entry_date.desc(), FundEntry.id.desc())
-        ).all()
-    )
+@router.get("/moves", response_model=list[FundMoveRead])
+def list_moves(
+    db: DbSession,
+    current_user: CurrentUser,
+    bucket_id: int | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[FundMove]:
+    stmt = select(FundMove).order_by(FundMove.moved_on.desc(), FundMove.id.desc()).limit(limit)
+    if bucket_id is not None:
+        stmt = stmt.where(
+            or_(FundMove.from_bucket_id == bucket_id, FundMove.to_bucket_id == bucket_id)
+        )
+    return list(db.scalars(stmt).all())
 
 
-@router.post(
-    "/funds/{bucket_id}/entries", response_model=FundEntryRead, status_code=status.HTTP_201_CREATED
-)
-def add_fund_entry(
-    bucket_id: int, payload: FundAdjust, db: DbSession, current_user: CurrentUser
-) -> FundEntry:
-    """An opening balance or top-up, or (negative) money taken out of the fund."""
-    _get(db, bucket_id)
-    if payload.amount == 0:
-        raise HTTPException(status_code=422, detail="Amount can't be zero")
-    when = payload.entry_date or date.today()
-    entry = FundEntry(
-        bucket_id=bucket_id,
-        kind="adjust",
-        year=when.year,
-        month=when.month,
-        entry_date=when,
-        amount=payload.amount,
-        currency=payload.currency,
-        base_amount=_base_value(db, payload.amount, payload.currency),
-        note=payload.note,
+@router.post("/moves", response_model=FundMoveRead, status_code=status.HTTP_201_CREATED)
+def create_move(payload: FundMoveCreate, db: DbSession, current_user: CurrentUser) -> FundMove:
+    """Cover one bucket from another, or add money to / take it out of one."""
+    if payload.from_bucket_id is None and payload.to_bucket_id is None:
+        raise HTTPException(status_code=422, detail="Pick at least one bucket")
+    if payload.from_bucket_id == payload.to_bucket_id:
+        raise HTTPException(status_code=422, detail="Pick two different buckets")
+    for bucket_id in (payload.from_bucket_id, payload.to_bucket_id):
+        if bucket_id is not None:
+            _get(db, bucket_id)
+
+    base = settings.base_currency
+    currency = payload.currency or base
+    amount = Decimal(payload.amount)
+    note = payload.note
+    if currency != base:
+        converted = convert(amount, currency, get_rate_map(db))
+        if converted is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No exchange rate for {currency} yet — refresh rates in Settings",
+            )
+        original = f"{currency} {amount:,.2f}"
+        note = f"{note} ({original})" if note else original
+        amount = converted
+
+    move = FundMove(
+        moved_on=payload.moved_on or date.today(),
+        from_bucket_id=payload.from_bucket_id,
+        to_bucket_id=payload.to_bucket_id,
+        amount=quantize_money(amount),
+        note=note[:200] if note else None,
     )
-    db.add(entry)
+    db.add(move)
     db.commit()
-    db.refresh(entry)
-    return entry
+    db.refresh(move)
+    return move
 
 
-@router.delete("/funds/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_fund_entry(entry_id: int, db: DbSession, current_user: CurrentUser) -> Response:
-    entry = db.get(FundEntry, entry_id)
-    if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
-    db.delete(entry)
+@router.delete("/moves/{move_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_move(move_id: int, db: DbSession, current_user: CurrentUser) -> Response:
+    move = db.get(FundMove, move_id)
+    if move is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Move not found")
+    db.delete(move)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
